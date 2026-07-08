@@ -4,7 +4,6 @@ import io.qdrant.client.QdrantClient;
 import io.qdrant.client.grpc.Collections.Distance;
 import io.qdrant.client.grpc.Collections.PayloadSchemaType;
 import io.qdrant.client.grpc.Collections.VectorParams;
-import io.qdrant.client.grpc.Collections.VectorsConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
@@ -33,7 +32,7 @@ public class QdrantCollectionInitializer implements ApplicationRunner {
     public void run(ApplicationArguments args) throws Exception {
         boolean exists = qdrantClient.listCollectionsAsync().get()
                 .stream()
-                .anyMatch(c -> c.getName().equals(COLLECTION_NAME));
+                .anyMatch(COLLECTION_NAME::equals);
 
         if (exists) {
             log.info("Qdrant collection '{}' already exists — skipping creation", COLLECTION_NAME);
@@ -44,11 +43,9 @@ public class QdrantCollectionInitializer implements ApplicationRunner {
 
         qdrantClient.createCollectionAsync(
                 COLLECTION_NAME,
-                VectorsConfig.newBuilder()
-                        .setParams(VectorParams.newBuilder()
-                                .setSize(EMBEDDING_DIMENSION)
-                                .setDistance(Distance.Cosine)
-                                .build())
+                VectorParams.newBuilder()
+                        .setSize(EMBEDDING_DIMENSION)
+                        .setDistance(Distance.Cosine)
                         .build()
         ).get();
 
@@ -69,14 +66,14 @@ public class QdrantCollectionInitializer implements ApplicationRunner {
 
     private void createKeywordIndex(String fieldName) throws Exception {
         qdrantClient.createPayloadIndexAsync(
-                COLLECTION_NAME, fieldName, PayloadSchemaType.Keyword, null, null, null
+                COLLECTION_NAME, fieldName, PayloadSchemaType.Keyword, null, null, null, null
         ).get();
         log.debug("Created keyword index on '{}'", fieldName);
     }
 
     private void createIntegerIndex(String fieldName) throws Exception {
         qdrantClient.createPayloadIndexAsync(
-                COLLECTION_NAME, fieldName, PayloadSchemaType.Integer, null, null, null
+                COLLECTION_NAME, fieldName, PayloadSchemaType.Integer, null, null, null, null
         ).get();
         log.debug("Created integer index on '{}'", fieldName);
     }

@@ -68,7 +68,7 @@
         <!-- Spring AI — OpenAI (chat + embedding) -->
         <dependency>
             <groupId>org.springframework.ai</groupId>
-            <artifactId>spring-ai-openai-spring-boot-starter</artifactId>
+            <artifactId>spring-ai-starter-model-openai</artifactId>
         </dependency>
 
         <!-- Qdrant gRPC client (vector store adapter uses this directly) -->
@@ -76,6 +76,18 @@
             <groupId>io.qdrant</groupId>
             <artifactId>client</artifactId>
             <version>${qdrant-client.version}</version>
+        </dependency>
+        <!-- io.qdrant:client declares these transitively at runtime scope only,
+             but QdrantCollectionInitializer references their types at compile time. -->
+        <dependency>
+            <groupId>com.google.protobuf</groupId>
+            <artifactId>protobuf-java</artifactId>
+            <version>3.24.0</version>
+        </dependency>
+        <dependency>
+            <groupId>com.google.guava</groupId>
+            <artifactId>guava</artifactId>
+            <version>30.1-jre</version>
         </dependency>
 
         <!-- Testing -->
