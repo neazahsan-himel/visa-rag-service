@@ -12,7 +12,8 @@ import java.util.Objects;
  * @param queryText     the original user query text, used for keyword-match scoring
  * @param scoredChunks  the merged, RRF-scored chunks, in ranked order
  */
-public record RetrievedContext(String queryText, List<ScoredChunk> scoredChunks) {
+public record
+RetrievedContext(String queryText, List<ScoredChunk> scoredChunks) {
 
     public RetrievedContext {
         if (queryText == null || queryText.isBlank()) {
