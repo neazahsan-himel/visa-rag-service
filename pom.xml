@@ -19,6 +19,8 @@
         <java.version>21</java.version>
         <spring-ai.version>1.0.0</spring-ai.version>
         <qdrant-client.version>1.9.1</qdrant-client.version>
+        <tika.version>3.3.0</tika.version>
+        <jsoup.version>1.22.2</jsoup.version>
     </properties>
 
     <dependencyManagement>
@@ -69,6 +71,25 @@
         <dependency>
             <groupId>org.springframework.ai</groupId>
             <artifactId>spring-ai-starter-model-openai</artifactId>
+        </dependency>
+
+        <!-- Document parsing: TikaDocumentParser (PDF/DOCX/HTML text extraction) -->
+        <dependency>
+            <groupId>org.apache.tika</groupId>
+            <artifactId>tika-core</artifactId>
+            <version>${tika.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.tika</groupId>
+            <artifactId>tika-parsers-standard-package</artifactId>
+            <version>${tika.version}</version>
+        </dependency>
+
+        <!-- HTML cleanup for embassy web pages (used by MetadataExtractor / future UrlDocumentLoader) -->
+        <dependency>
+            <groupId>org.jsoup</groupId>
+            <artifactId>jsoup</artifactId>
+            <version>${jsoup.version}</version>
         </dependency>
 
         <!-- Qdrant gRPC client (vector store adapter uses this directly) -->
