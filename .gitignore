@@ -33,6 +33,11 @@ build/
 .vscode/
 
 ### Project specific ###
-DEVELOPMENT_RULES.md
 .env
 *.env
+PROGRESS.md
+SPRINTS.md
+docs/SPRINT1_EXPLAINED.md
+docs/SPRINT2_EXPLAINED.md
+docs/SPRINT3_EXPLAINED.md
+docs/SPRINT4_EXPLAINED.md
