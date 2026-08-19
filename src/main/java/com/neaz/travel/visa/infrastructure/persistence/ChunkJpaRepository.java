@@ -28,7 +28,11 @@ public interface ChunkJpaRepository extends JpaRepository<ChunkJpaEntity, UUID> 
      * to apply {@code passport_iso}, destination (via {@code countries}),
      * and optional visa type (via {@code visa_types}) <em>before</em> {@code
      * ts_rank} scoring. Only chunks belonging to active documents are
-     * eligible.
+     * eligible. When {@code visaTypeCode} is given, documents tagged
+     * {@code GENERAL} always match too, alongside the exact requested type —
+     * {@code GENERAL} holds cross-cutting content that applies to every visa
+     * type, so an exact-match-only filter would make it permanently
+     * unreachable.
      */
     @Query(value = """
             SELECT dc.id AS id,
@@ -46,7 +50,7 @@ public interface ChunkJpaRepository extends JpaRepository<ChunkJpaEntity, UUID> 
             WHERE d.active = true
               AND d.passport_iso = :passportIso
               AND c.iso_code = :destinationIso
-              AND (CAST(:visaTypeCode AS VARCHAR) IS NULL OR vt.code = :visaTypeCode)
+              AND (CAST(:visaTypeCode AS VARCHAR) IS NULL OR vt.code = :visaTypeCode OR vt.code = 'GENERAL')
               AND dc.tsv @@ plainto_tsquery('english', :queryText)
             ORDER BY rank DESC
             LIMIT :topK
