@@ -6,19 +6,21 @@ import org.springframework.context.annotation.Configuration;
 
 /**
  * Configures embedding model settings.
- * Spring AI auto-configures the {@code EmbeddingModel} bean via
- * {@code spring-ai-openai-spring-boot-starter}. This class exposes the active
- * model ID as a named bean for injection into adapters and audit logging.
+ * Spring AI auto-configures the {@code EmbeddingModel} bean from whichever
+ * provider {@code spring.ai.model.embedding} selects (openai or ollama). This
+ * class exposes the active model ID as a named bean for injection into
+ * adapters and audit logging.
  *
- * <p>To switch to Ollama, activate the {@code ollama} Spring profile and add
- * {@code spring-ai-ollama-spring-boot-starter} to the classpath.
+ * <p>Switch providers with {@code SPRING_PROFILES_ACTIVE=ollama} (see
+ * {@code application-ollama.properties}); the nested placeholder below picks
+ * up whichever provider's model property is actually set.
  */
 @Configuration
 public class EmbeddingModelConfig {
 
     @Bean("embeddingModelId")
     public String embeddingModelId(
-            @Value("${spring.ai.openai.embedding.options.model:text-embedding-3-small}") String modelId) {
+            @Value("${spring.ai.ollama.embedding.options.model:${spring.ai.openai.embedding.options.model:text-embedding-3-small}}") String modelId) {
         return modelId;
     }
 }

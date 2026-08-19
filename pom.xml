@@ -73,6 +73,12 @@
             <artifactId>spring-ai-starter-model-openai</artifactId>
         </dependency>
 
+        <!-- Spring AI — Ollama (chat + embedding), local-LLM alternative to OpenAI -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-starter-model-ollama</artifactId>
+        </dependency>
+
         <!-- Document parsing: TikaDocumentParser (PDF/DOCX/HTML text extraction) -->
         <dependency>
             <groupId>org.apache.tika</groupId>
