@@ -3,7 +3,7 @@ INSERT INTO countries (iso_code, name) VALUES
     ('IN', 'India');
 
 INSERT INTO visa_types (country_id, code, name)
-SELECT id, code, name
+SELECT countries.id, v.code, v.name
 FROM countries
 CROSS JOIN (VALUES
     ('TOURIST', 'Tourist Visa'),

@@ -1,8 +1,8 @@
 CREATE TABLE query_audit (
     id                  UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
     query_text          TEXT         NOT NULL,
-    passport_iso        CHAR(2)      NOT NULL,
-    destination_iso     CHAR(2)      NOT NULL,
+    passport_iso        VARCHAR(2)   NOT NULL,
+    destination_iso     VARCHAR(2)   NOT NULL,
     visa_type_code      VARCHAR(50),
     retrieved_chunk_ids UUID[]       NOT NULL,
     confidence_score    NUMERIC(4,3) NOT NULL,

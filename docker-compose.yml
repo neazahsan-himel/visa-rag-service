@@ -7,7 +7,8 @@ services:
       POSTGRES_USER: visa_user
       POSTGRES_PASSWORD: visa_password
     ports:
-      - "5432:5432"
+      # host 5433, not 5432 — a native Windows Postgres service already owns 5432 on this machine
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -24,7 +25,8 @@ services:
     volumes:
       - qdrant_data:/qdrant/storage
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:6333/healthz || exit 1"]
+      # qdrant image has no wget/curl; use bash's /dev/tcp for a plain TCP check
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/6333' || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5

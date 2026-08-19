@@ -6,6 +6,7 @@ import io.qdrant.client.grpc.Collections.PayloadSchemaType;
 import io.qdrant.client.grpc.Collections.VectorParams;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.stereotype.Component;
@@ -13,6 +14,11 @@ import org.springframework.stereotype.Component;
 /**
  * Creates the {@code visa_chunks} Qdrant collection and all payload indexes on startup
  * if they do not already exist. Runs once per application start via {@link ApplicationRunner}.
+ *
+ * <p>Vector size must match the active embedding model's output dimension
+ * ({@code rag.embedding.dimension}) — OpenAI's {@code text-embedding-3-small}
+ * is 1536, Ollama's {@code nomic-embed-text} is 768. Switching embedding
+ * models after the collection already exists requires recreating it.
  */
 @Component
 public class QdrantCollectionInitializer implements ApplicationRunner {
@@ -20,12 +26,15 @@ public class QdrantCollectionInitializer implements ApplicationRunner {
     private static final Logger log = LoggerFactory.getLogger(QdrantCollectionInitializer.class);
 
     static final String COLLECTION_NAME = "visa_chunks";
-    private static final int EMBEDDING_DIMENSION = 1536;
 
     private final QdrantClient qdrantClient;
+    private final int embeddingDimension;
 
-    public QdrantCollectionInitializer(QdrantClient qdrantClient) {
+    public QdrantCollectionInitializer(
+            QdrantClient qdrantClient,
+            @Value("${rag.embedding.dimension:1536}") int embeddingDimension) {
         this.qdrantClient = qdrantClient;
+        this.embeddingDimension = embeddingDimension;
     }
 
     @Override
@@ -44,7 +53,7 @@ public class QdrantCollectionInitializer implements ApplicationRunner {
         qdrantClient.createCollectionAsync(
                 COLLECTION_NAME,
                 VectorParams.newBuilder()
-                        .setSize(EMBEDDING_DIMENSION)
+                        .setSize(embeddingDimension)
                         .setDistance(Distance.Cosine)
                         .build()
         ).get();
