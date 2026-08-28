@@ -2,6 +2,7 @@ package com.neaz.travel.visa;
 
 import com.neaz.travel.visa.application.command.VisaQueryCommand;
 import com.neaz.travel.visa.application.ingestion.DocumentIngestionService;
+import com.neaz.travel.visa.application.monitoring.PendingChangeQueryService;
 import com.neaz.travel.visa.application.port.ChatPort;
 import com.neaz.travel.visa.application.port.DocumentParsingPort;
 import com.neaz.travel.visa.application.port.EmbeddingPort;
@@ -19,6 +20,7 @@ import com.neaz.travel.visa.infrastructure.persistence.ChunkJpaRepository;
 import com.neaz.travel.visa.infrastructure.persistence.DocumentJpaRepository;
 import com.neaz.travel.visa.infrastructure.persistence.DocumentRepositoryAdapter;
 import com.neaz.travel.visa.infrastructure.persistence.QueryAuditJpaRepository;
+import com.neaz.travel.visa.infrastructure.persistence.SourceCheckLogRepositoryAdapter;
 import com.neaz.travel.visa.infrastructure.persistence.VisaQueryLogRepositoryAdapter;
 import com.neaz.travel.visa.infrastructure.vectorstore.QdrantVectorStoreAdapter;
 import com.neaz.travel.visa.presentation.controller.GlobalExceptionHandler;
@@ -93,7 +95,7 @@ import static org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTest
 @Tag("integration")
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = NONE)
-@Import({DocumentRepositoryAdapter.class, VisaQueryLogRepositoryAdapter.class})
+@Import({DocumentRepositoryAdapter.class, VisaQueryLogRepositoryAdapter.class, SourceCheckLogRepositoryAdapter.class})
 @Testcontainers
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 class RagPipelineIntegrationTest {
@@ -152,6 +154,8 @@ class RagPipelineIntegrationTest {
     @Autowired
     private VisaQueryLogRepositoryAdapter visaQueryLogRepositoryAdapter;
     @Autowired
+    private SourceCheckLogRepositoryAdapter sourceCheckLogRepositoryAdapter;
+    @Autowired
     private ChunkJpaRepository chunkJpaRepository;
     @Autowired
     private DocumentJpaRepository documentJpaRepository;
@@ -173,7 +177,10 @@ class RagPipelineIntegrationTest {
         DocumentIngestionService ingestionService = new DocumentIngestionService(
                 documentParsingPort, new ChunkingStrategy(512, 64), embeddingPort, vectorSearchPort,
                 documentRepositoryAdapter);
-        ingestionController = new IngestionController(ingestionService, new IngestionMapper());
+        PendingChangeQueryService pendingChangeQueryService = new PendingChangeQueryService(
+                sourceCheckLogRepositoryAdapter, documentRepositoryAdapter);
+        ingestionController = new IngestionController(
+                ingestionService, pendingChangeQueryService, new IngestionMapper());
 
         HybridRetriever hybridRetriever = new HybridRetriever(embeddingPort, vectorSearchPort, documentRepositoryAdapter);
         chatPort = new CannedChatPort("The tourist visa fee for Bangladeshi passport holders is 800 BDT. [1]");

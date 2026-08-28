@@ -1,6 +1,6 @@
 # API Reference — Visa RAG Service
 
-Two endpoints exist today: document ingestion (curator-facing) and visa query (client-facing). Both live under `/api/v1` and share one response envelope.
+Three endpoints exist today: document ingestion, source-change review (both curator-facing), and visa query (client-facing). All live under `/api/v1` and share one response envelope.
 
 ---
 
@@ -84,6 +84,47 @@ Ingests one document: parses it, splits it into chunks, embeds each chunk, persi
 ```
 
 `status` is `"CREATED"` for a new document, or `"DUPLICATE"` if a document with identical extracted text already exists — in which case `documentId`/`chunkCount` refer to the **existing** document, and nothing is re-ingested.
+
+### Errors
+
+See [Error Responses](#error-responses).
+
+---
+
+## GET /api/v1/ingestion/pending-changes
+
+Lists every unreviewed source-change result flagged `CHANGED` by the scheduled `SourceChangeMonitor` (see [Source Change Monitoring](#source-change-monitoring) below). Returns an empty array when nothing is pending — that is not an error.
+
+### Response — 200 OK
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "checkId": "6a1e2c3d-...",
+      "documentId": "b3f1c8a2-...",
+      "documentTitle": "India Tourist Visa – Required Documents (HCI Dhaka)",
+      "sourceUrl": "https://hcidhaka.gov.in/...",
+      "checkedAt": "2026-08-19T02:00:00Z",
+      "detectedHash": "3a7bd3e2360a3d..."
+    }
+  ],
+  "message": null,
+  "timestamp": "2026-08-19T16:30:00Z"
+}
+```
+
+| Field | Type | Notes |
+|---|---|---|
+| `checkId` | UUID | Identifier of the underlying `source_check_log` row. |
+| `documentId` | UUID | The active document whose source appears to have changed. |
+| `documentTitle` | string | The document's title, so a curator can recognize it without a lookup. |
+| `sourceUrl` | string | The official source URL that was checked. |
+| `checkedAt` | ISO-8601 instant | When the change was detected. |
+| `detectedHash` | string | SHA-256 hex of the live source's extracted text, for comparison against the stored version. |
+
+A curator acts on a flagged entry by re-ingesting the source through `POST /api/v1/ingestion/documents` (see [Source Change Monitoring](#source-change-monitoring)) — there is no endpoint to mark a row reviewed without re-ingesting; `SourceCheckLogRepository.markReviewed` exists at the domain layer but has no HTTP surface yet.
 
 ### Errors
 
@@ -175,6 +216,21 @@ A document ingested with `visaTypeCode: "GENERAL"` is cross-cutting content (fee
 ### Errors
 
 See [Error Responses](#error-responses).
+
+---
+
+## Source Change Monitoring
+
+A scheduled job (`SourceChangeMonitor`, interval configurable via `source-monitoring.check-interval-ms`, default 24h) checks every active document that has a `sourceUrl`: it fetches the live content, hashes it the same way ingestion hashes stored content, and compares. Results are logged to `source_check_log` as `UNCHANGED`, `CHANGED`, or `FETCH_FAILED` — nothing is written to the knowledge base automatically.
+
+The full workflow is human-in-the-loop by design (no auto re-ingestion, so nothing unreviewed ever becomes retrievable content):
+
+1. The monitor runs on schedule and flags changed sources.
+2. A curator checks `GET /api/v1/ingestion/pending-changes` for anything flagged `CHANGED`.
+3. The curator confirms the change is legitimate (not a scrape glitch or a session-driven portal artifact — see the caveat below) and re-ingests via `POST /api/v1/ingestion/documents`.
+4. `DocumentIngestionService` detects there is already an active document for that `sourceUrl` with different content, and deactivates the prior version in **both** PostgreSQL (`documents.active = false`) and Qdrant (payload-only update, `active = false` on every chunk of the old document) — so the old version stops being retrievable in either store, without needing to re-embed or delete anything.
+
+**Caveat:** `indianvisaonline.gov.in` and `indianvisa-bangladesh.nic.in` are session/form-driven portals that a plain HTTP fetch cannot meaningfully check — expect these to mostly report `FETCH_FAILED` ("not automatically checkable") rather than a reliable `CHANGED`/`UNCHANGED` signal. Monitoring is reliable for static sources such as PDFs.
 
 ---
 

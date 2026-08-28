@@ -23,6 +23,24 @@ public interface DocumentRepository {
     Optional<Document> findByFileHash(String fileHash);
 
     /**
+     * Finds every active document that has an official {@code sourceUrl},
+     * i.e. every document the source-change monitor can check.
+     *
+     * @return active documents with a checkable source, implementation-defined order
+     */
+    List<Document> findAllActiveWithSourceUrl();
+
+    /**
+     * Finds the currently active document for a given source URL, if any.
+     * Used by ingestion to detect and supersede a prior version when
+     * re-ingesting the same source with different content.
+     *
+     * @param sourceUrl the official source URL to look up
+     * @return the active document for that source, if one exists
+     */
+    Optional<Document> findActiveBySourceUrl(String sourceUrl);
+
+    /**
      * Performs a metadata-filtered full-text search over persisted chunks.
      * The filter must be applied before {@code ts_rank} scoring — an
      * unfiltered search is a defect.

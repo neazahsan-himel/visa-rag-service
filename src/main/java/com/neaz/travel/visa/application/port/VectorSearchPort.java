@@ -6,6 +6,7 @@ import com.neaz.travel.visa.domain.model.MetadataFilter;
 import com.neaz.travel.visa.domain.model.ScoredChunk;
 
 import java.util.List;
+import java.util.UUID;
 
 /**
  * Outbound port for the vector-store half of retrieval and ingestion.
@@ -35,4 +36,14 @@ public interface VectorSearchPort {
      *                 passport/destination/visa-type/last-updated fields
      */
     void upsert(Chunk chunk, float[] vector, DocumentMetadata metadata);
+
+    /**
+     * Marks every indexed chunk of a document inactive via a payload-only
+     * update — no vectors are re-upserted. Used when a document is
+     * superseded by a newer version, so its chunks stop being retrievable
+     * without needing to be re-embedded or deleted.
+     *
+     * @param documentId the document whose chunks should be marked inactive
+     */
+    void deactivateDocument(UUID documentId);
 }

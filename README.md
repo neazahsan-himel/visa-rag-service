@@ -108,6 +108,16 @@ curl -X POST http://localhost:8081/api/v1/visa/query \
 
 Full request/response shapes, including the error format and the low-confidence fallback response, are documented in [`docs/api.md`](docs/api.md).
 
+### 5. Review flagged source changes
+
+A scheduled job checks every active document's official source for changes and flags anything that differs. See what's pending review:
+
+```bash
+curl http://localhost:8081/api/v1/ingestion/pending-changes
+```
+
+Re-ingest a flagged document via step 3's endpoint — this automatically deactivates the prior version in both PostgreSQL and Qdrant. Full workflow in [`docs/api.md`](docs/api.md#source-change-monitoring).
+
 ---
 
 ## Configuration
@@ -125,6 +135,8 @@ Key properties (`application.properties`; see `application-ollama.properties` fo
 | `rag.confidence.threshold` | `0.60` | Below this, the query endpoint returns the no-hallucination fallback instead of calling the LLM |
 | `rag.embedding.dimension` | `1536` (`768` for Ollama) | Must match the active embedding model's output size |
 | `knowledge-base.root` | `knowledge-base` | Root directory ingestion paths resolve against |
+| `source-monitoring.fetch-timeout-seconds` | `10` | HTTP timeout before a source-change check is treated as unreachable |
+| `source-monitoring.check-interval-ms` | `86400000` (24h) | Delay between scheduled source-change monitor runs |
 
 All can be overridden via environment variables (Spring's relaxed binding), e.g. `SPRING_DATASOURCE_URL`, `QDRANT_HOST`.
 

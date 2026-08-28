@@ -6,18 +6,14 @@ import com.neaz.travel.visa.application.port.DocumentParsingPort;
 import com.neaz.travel.visa.application.port.EmbeddingPort;
 import com.neaz.travel.visa.application.port.VectorSearchPort;
 import com.neaz.travel.visa.application.result.IngestionResult;
-import com.neaz.travel.visa.common.exception.VisaRagException;
+import com.neaz.travel.visa.common.util.Sha256Hasher;
 import com.neaz.travel.visa.domain.model.Chunk;
 import com.neaz.travel.visa.domain.model.Document;
 import com.neaz.travel.visa.domain.model.DocumentSource;
 import com.neaz.travel.visa.domain.repository.DocumentRepository;
 import org.springframework.stereotype.Service;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
-import java.util.HexFormat;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -51,13 +47,18 @@ public class DocumentIngestionService {
 
     public IngestionResult ingest(IngestDocumentCommand command) {
         String text = documentParsingPort.parse(new DocumentSource(command.path()));
-        String fileHash = sha256Hex(text);
+        String fileHash = Sha256Hasher.hex(text);
 
         Optional<Document> existing = documentRepository.findByFileHash(fileHash);
         if (existing.isPresent()) {
             Document duplicate = existing.get();
             return new IngestionResult(duplicate.getId(), duplicate.getChunks().size(), IngestionResult.Status.DUPLICATE);
         }
+
+        String sourceUrl = command.metadata().sourceUrl();
+        Optional<Document> previousVersion = sourceUrl == null
+                ? Optional.empty()
+                : documentRepository.findActiveBySourceUrl(sourceUrl);
 
         UUID documentId = UUID.randomUUID();
         List<Chunk> chunks = documentChunkingPort.chunk(text, documentId, command.metadata());
@@ -73,21 +74,14 @@ public class DocumentIngestionService {
             vectorSearchPort.upsert(chunks.get(i), vectors.get(i), command.metadata());
         }
 
-        return new IngestionResult(documentId, chunks.size(), IngestionResult.Status.CREATED);
-    }
+        // Retire the prior version in both stores so no query can retrieve
+        // superseded and current content for the same source at once.
+        previousVersion.ifPresent(previous -> {
+            previous.deactivate();
+            documentRepository.save(previous);
+            vectorSearchPort.deactivateDocument(previous.getId());
+        });
 
-    /**
-     * Fingerprints the document by its extracted text (not its raw bytes,
-     * which this layer never sees) so repeated ingestion of the same content
-     * is detected as a duplicate rather than silently re-ingested.
-     */
-    private String sha256Hex(String text) {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] hash = digest.digest(text.getBytes(StandardCharsets.UTF_8));
-            return HexFormat.of().formatHex(hash);
-        } catch (NoSuchAlgorithmException e) {
-            throw new VisaRagException("SHA-256 algorithm not available", e);
-        }
+        return new IngestionResult(documentId, chunks.size(), IngestionResult.Status.CREATED);
     }
 }

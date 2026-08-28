@@ -16,8 +16,10 @@ import io.qdrant.client.VectorsFactory;
 import io.qdrant.client.WithPayloadSelectorFactory;
 import io.qdrant.client.grpc.Points.Filter;
 import io.qdrant.client.grpc.Points.PointStruct;
+import io.qdrant.client.grpc.Points.PointsSelector;
 import io.qdrant.client.grpc.Points.ScoredPoint;
 import io.qdrant.client.grpc.Points.SearchPoints;
+import io.qdrant.client.grpc.Points.SetPayloadPoints;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -90,11 +92,17 @@ public class QdrantVectorStoreAdapter implements VectorSearchPort {
      * specific visa type is requested, {@code GENERAL} content always
      * matches alongside it — otherwise cross-cutting content would never
      * surface for any type-scoped query.
+     * <p>
+     * Excludes points marked {@code active=false} (see {@link
+     * #deactivateDocument}). Note: points upserted before this field
+     * existed have no {@code active} payload key at all, so they will not
+     * match this condition and will appear unretrievable until re-ingested.
      */
     private Filter buildFilter(MetadataFilter filter) {
         Filter.Builder builder = Filter.newBuilder()
                 .addMust(ConditionFactory.matchKeyword("passport_iso", filter.passportIso()))
-                .addMust(ConditionFactory.matchKeyword("destination_iso", filter.destinationIso()));
+                .addMust(ConditionFactory.matchKeyword("destination_iso", filter.destinationIso()))
+                .addMust(ConditionFactory.match("active", true));
 
         if (filter.visaTypeCode() != null) {
             Filter visaTypeOrGeneral = Filter.newBuilder()
@@ -155,6 +163,7 @@ public class QdrantVectorStoreAdapter implements VectorSearchPort {
                 .putPayload("visa_type_code", ValueFactory.value(metadata.visaTypeCode()))
                 .putPayload("last_updated", ValueFactory.value(metadata.lastUpdated().toString()))
                 .putPayload("chunk_index", ValueFactory.value(chunk.getChunkIndex()))
+                .putPayload("active", ValueFactory.value(true))
                 .build();
 
         try {
@@ -164,6 +173,29 @@ public class QdrantVectorStoreAdapter implements VectorSearchPort {
             throw new VisaRagException("Interrupted while upserting chunk to Qdrant: " + chunk.getId(), e);
         } catch (ExecutionException e) {
             throw new VisaRagException("Failed to upsert chunk to Qdrant: " + chunk.getId(), e.getCause());
+        }
+    }
+
+    @Override
+    public void deactivateDocument(UUID documentId) {
+        Filter documentFilter = Filter.newBuilder()
+                .addMust(ConditionFactory.matchKeyword("document_id", documentId.toString()))
+                .build();
+        PointsSelector selector = PointsSelector.newBuilder().setFilter(documentFilter).build();
+        SetPayloadPoints request = SetPayloadPoints.newBuilder()
+                .setCollectionName(COLLECTION_NAME)
+                .setWait(true)
+                .putPayload("active", ValueFactory.value(false))
+                .setPointsSelector(selector)
+                .build();
+
+        try {
+            qdrantClient.setPayloadAsync(request, null).get();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new VisaRagException("Interrupted while deactivating document in Qdrant: " + documentId, e);
+        } catch (ExecutionException e) {
+            throw new VisaRagException("Failed to deactivate document in Qdrant: " + documentId, e.getCause());
         }
     }
 }

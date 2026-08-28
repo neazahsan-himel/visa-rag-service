@@ -83,6 +83,18 @@ public class DocumentRepositoryAdapter implements DocumentRepository {
     }
 
     @Override
+    public List<Document> findAllActiveWithSourceUrl() {
+        return documentJpaRepository.findByActiveTrueAndSourceUrlIsNotNull().stream()
+                .map(this::toDomain)
+                .toList();
+    }
+
+    @Override
+    public Optional<Document> findActiveBySourceUrl(String sourceUrl) {
+        return documentJpaRepository.findByActiveTrueAndSourceUrl(sourceUrl).map(this::toDomain);
+    }
+
+    @Override
     public List<ScoredChunk> fullTextSearch(String queryText, MetadataFilter filter, int topK) {
         return chunkJpaRepository.searchFullText(
                         queryText, filter.passportIso(), filter.destinationIso(), filter.visaTypeCode(), topK)
