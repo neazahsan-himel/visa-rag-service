@@ -6,6 +6,8 @@ This is not a "chat with PDF" demo. It follows Clean Architecture, is backed by 
 
 First supported route: **passport Bangladesh → destination India.**
 
+**Status:** Phase 1 MVP complete — all 7 planned sprints shipped (ingestion, hybrid retrieval RAG pipeline, error handling/tests/docs, source-change monitoring & version supersession). See [`SPRINTS.md`](SPRINTS.md) / [`PROGRESS.md`](PROGRESS.md) for the full task-level history.
+
 ---
 
 ## Tech Stack
@@ -164,7 +166,7 @@ The `docs/SPRINT5_SMOKE_TEST_REPORT.md` describes the one manual, full-stack run
 ```
 com.neaz.travel.visa
 ├── config/            Spring @Configuration only, no business logic
-├── common/            exceptions, ApiResponse envelope — no dependency on any other local package
+├── common/            exceptions, ApiResponse envelope, stateless utils (e.g. Sha256Hasher) — no dependency on any other local package
 ├── presentation/      controllers, DTOs, mappers, GlobalExceptionHandler
 ├── application/       use-case orchestration, ports (interfaces infrastructure implements)
 ├── domain/            pure Java — no Spring, no JPA
@@ -177,7 +179,10 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for full package responsibili
 
 ## Documentation
 
-- [`docs/api.md`](docs/api.md) — endpoint reference: request/response shapes, error format, the `GENERAL` fallback, the low-confidence response
+- [`docs/api.md`](docs/api.md) — endpoint reference: request/response shapes, error format, the `GENERAL` fallback, the low-confidence response, source-change monitoring
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — package structure, dependency rules, data flow, RAG pipeline detail, database schema
 - [`docs/SPRINT5_EXPLAINED.md`](docs/SPRINT5_EXPLAINED.md) — how the query/retrieval pipeline works, in narrative form
 - [`docs/SPRINT5_SMOKE_TEST_REPORT.md`](docs/SPRINT5_SMOKE_TEST_REPORT.md) — the first live end-to-end run and what it caught
+- [`docs/SPRINT6_EXPLAINED.md`](docs/SPRINT6_EXPLAINED.md) — global exception handling, the test suite, and the docs written to close out Sprint 6
+- [`docs/SPRINT7_EXPLAINED.md`](docs/SPRINT7_EXPLAINED.md) — source-change monitoring and document version supersession, in narrative form
+- [`CLAUDE.md`](CLAUDE.md) / [`DEVELOPMENT_RULES.md`](DEVELOPMENT_RULES.md) — project governance: architecture rules, coding principles, and process this codebase is built to

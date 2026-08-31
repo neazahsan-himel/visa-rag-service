@@ -1,5 +1,6 @@
 package com.neaz.travel.visa.presentation.controller;
 
+import com.neaz.travel.visa.common.exception.ApplicantProfileNotFoundException;
 import com.neaz.travel.visa.common.exception.DocumentNotFoundException;
 import com.neaz.travel.visa.common.exception.InsufficientContextException;
 import com.neaz.travel.visa.common.exception.VisaRagException;
@@ -42,6 +43,21 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(DocumentNotFoundException.class)
     public ResponseEntity<ApiResponse<?>> handleDocumentNotFound(DocumentNotFoundException ex) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.error(ex.getMessage()));
+    }
+
+    @ExceptionHandler(ApplicantProfileNotFoundException.class)
+    public ResponseEntity<ApiResponse<?>> handleApplicantProfileNotFound(ApplicantProfileNotFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.error(ex.getMessage()));
+    }
+
+    /**
+     * Raised for malformed applicant-profile input (an unknown field path, or
+     * a value that doesn't match the field's declared type) — always caused
+     * by bad client input, so this is a 400, not the catch-all's 500.
+     */
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<ApiResponse<?>> handleIllegalArgument(IllegalArgumentException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ApiResponse.error(ex.getMessage()));
     }
 
     /**
