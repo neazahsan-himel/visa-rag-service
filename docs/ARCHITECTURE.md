@@ -36,7 +36,7 @@ The Visa RAG Service is a **Retrieval-Augmented Generation** system that answers
                            │ HTTP
 ┌──────────────────────────▼───────────────────────────────────┐
 │                    Presentation Layer                        │
-│         VisaQueryController    IngestionController           │
+│  VisaQueryController  IngestionController  ApplicantProfileController │
 └──────────┬───────────────────────────────┬───────────────────┘
            │                               │
 ┌──────────▼───────────────────────────────▼───────────────────┐
@@ -44,21 +44,42 @@ The Visa RAG Service is a **Retrieval-Augmented Generation** system that answers
 │                                                              │
 │  query/                       ingestion/                     │
 │    VisaQueryService              DocumentIngestionService    │
-│    retrieval/                                                │
-│      HybridRetriever          port/                          │
-│      ReRanker                   EmbeddingPort               │
-│    prompt/                      VectorSearchPort            │
-│      VisaPromptTemplate          ChatPort                   │
-│    citation/                                                 │
-│      CitationBuilder                                         │
+│    retrieval/                 monitoring/                    │
+│      HybridRetriever            SourceChangeMonitor          │
+│      ReRanker                   PendingChangeQueryService    │
+│    prompt/                    applicant/                     │
+│      VisaPromptTemplate         ApplicantProfileService      │
+│    citation/                    ApplicantProfileVerification-│
+│      CitationBuilder              Service                    │
+│                                  ApplicantFieldValueParser   │
+│                                document/                      │
+│                                  DocumentIntelligenceService │
+│                                  ExtractedFieldConfirmation-  │
+│                                    Service                    │
+│                                port/                          │
+│                                  EmbeddingPort               │
+│                                  VectorSearchPort            │
+│                                  ChatPort                    │
+│                                  ImageQualityPort  OcrPort   │
+│                                  VisionExtractionPort         │
+│                                  DocumentStoragePort          │
 └──────────┬───────────────────────────────┬───────────────────┘
            │                               │
 ┌──────────▼───────────────────────────────▼───────────────────┐
 │                       Domain Layer                           │
 │   model/  VisaQuery  VisaAnswer  Document  Chunk             │
-│           RetrievedContext  DocumentMetadata                 │
+│           RetrievedContext  DocumentMetadata  SourceCheckLog │
+│           ApplicantProfile  ExtractedField  VerificationStatus│
+│           PersonalInfo/PassportInfo/.../TravelInfo  Address  │
+│           ApplicantDocument  DocumentType                    │
+│           DocumentProcessingStatus  MrzData                  │
+│           ImageQualityAssessment  ImageQualityIssue          │
+│           VisualPassportData  VisualFieldReading             │
 │   repository/  DocumentRepository  VisaQueryLogRepository   │
-│   service/     ConfidenceScorer                             │
+│                ApplicantProfileRepository                    │
+│                ApplicantDocumentRepository                   │
+│   service/     ConfidenceScorer  MrzParser                  │
+│                PassportFieldValidator                        │
 └──────────────────────────────────────────────────────────────┘
                            ▲
                            │ implements
@@ -66,14 +87,21 @@ The Visa RAG Service is a **Retrieval-Augmented Generation** system that answers
 │                   Infrastructure Layer                       │
 │                                                              │
 │  persistence/   JPA entities, Spring Data repos, adapters   │
+│                 (incl. ApplicantProfileRepositoryAdapter,    │
+│                 ApplicantDocumentRepositoryAdapter)           │
 │  vectorstore/   QdrantVectorStoreAdapter                    │
 │  embedding/     EmbeddingAdapter                            │
 │  llm/           ChatAdapter                                 │
 │  document/      TikaDocumentParser, ChunkingStrategy,       │
 │                 FileSystemDocumentLoader, UrlDocumentLoader, │
-│                 MetadataExtractor                            │
+│                 MetadataExtractor,                            │
+│                 quality/ImageQualityAnalyzer,                │
+│                 ocr/TesseractOcrAdapter,                     │
+│                 vision/VisionPassportExtractionAdapter        │
 └──────────────────────────────────────────────────────────────┘
 ```
+
+> `application/monitoring/` and the Applicant Profile additions (`application/applicant/`, `ApplicantProfile` and its view types, `ApplicantProfileRepository`, `ApplicantProfileRepositoryAdapter`) are not in this diagram's original Phase 1 design — see [§8 Future Roadmap](#8-future-roadmap) and `docs/VISA_APPLICATION_ASSISTANT_PROPOSAL.md` for why each was added and when. Same for `application/document/` and the `ImageQualityPort`/`OcrPort`/`VisionExtractionPort`/`DocumentStoragePort` ports (Phase C, §5.4 below) — the original proposal sketched a different port set (`OcrPort`/`DocumentClassificationPort`/`FieldExtractionPort`/`DocumentValidationPort`); see `PROGRESS.md`'s Phase C section for why it changed.
 
 ---
 
@@ -98,6 +126,9 @@ com.neaz.travel.visa
 │   │   ├── prompt/
 │   │   └── citation/
 │   ├── ingestion/
+│   ├── monitoring/
+│   ├── applicant/
+│   ├── document/
 │   ├── command/
 │   ├── result/
 │   └── port/
@@ -111,9 +142,12 @@ com.neaz.travel.visa
     ├── embedding/
     ├── llm/
     └── document/
+        ├── ocr/
+        ├── quality/
+        └── vision/
 ```
 
-No package may be created outside this structure without an explicit architectural decision.
+No package may be created outside this structure without an explicit architectural decision. `application/monitoring/` (Sprint 7), `application/applicant/` (Phase B), and `application/document/` (Phase C) were all added this way, via `AskUserQuestion`, before being created — see §8 and the relevant `docs/SPRINT*_EXPLAINED.md` / `docs/VISA_APPLICATION_ASSISTANT_PROPOSAL.md`. `infrastructure/document/{ocr,quality,vision}` are sub-packages of the pre-existing `infrastructure/document/`, not new top-level packages.
 
 ---
 
@@ -132,18 +166,22 @@ Spring `@Configuration` classes only. No business logic.
 
 Shared value types, exceptions, and utilities used across all layers. Has no dependency on any other local package.
 
-- `exception/` — `VisaRagException`, `DocumentNotFoundException`, `InsufficientContextException`
+- `exception/` — `VisaRagException`, `DocumentNotFoundException`, `InsufficientContextException`, `ApplicantProfileNotFoundException`, `ApplicantDocumentNotFoundException`
 - `model/` — `PagedResult<T>`, `ApiResponse<T>`
-- `util/` — `TextSanitizer`, `MetadataValidator`
+- `util/` — `TextSanitizer`, `MetadataValidator`, `Sha256Hasher`
 
 ### `presentation`
 
-Spring MVC controllers, DTOs, and request/response mappers. Depends only on `application` commands and results.
+Spring MVC controllers, DTOs, request/response mappers, and the global exception handler. Depends only on `application` commands and results.
 
 - `controller/VisaQueryController` — `POST /api/v1/visa/query`
-- `controller/IngestionController` — `POST /api/v1/ingestion/documents`
-- `dto/` — `VisaQueryRequest`, `VisaQueryResponse`, `IngestionRequest`, `IngestionResponse`
-- `mapper/` — maps between DTOs and application-layer commands/results
+- `controller/IngestionController` — `POST /api/v1/ingestion/documents`, `GET /api/v1/ingestion/pending-changes`
+- `controller/ApplicantProfileController` — `POST/GET /api/v1/applicants/{applicantId}/profile[/fields[/verify]]`
+- `controller/GlobalExceptionHandler` — `@RestControllerAdvice`; translates every exception into the shared `ApiResponse` envelope
+- `dto/` — `VisaQueryRequest`, `VisaQueryResponse`, `IngestionRequest`, `IngestionResponse`, `SetApplicantFieldRequest`, `VerifyApplicantFieldRequest`, `ApplicantProfileResponse`
+- `mapper/` — maps between DTOs and application-layer commands/results (`VisaQueryMapper`, `IngestionMapper`, `ApplicantProfileMapper`)
+
+> **No controller for Phase C (Passport Document Intelligence) yet.** `application/document/DocumentIntelligenceService` and `ExtractedFieldConfirmationService` (§3.1 below) have no `presentation` entry point — `UploadApplicantDocumentCommand`/`ConfirmExtractedFieldsCommand` must be constructed directly. See `PROGRESS.md`'s Phase C section.
 
 ### `application`
 
@@ -163,7 +201,29 @@ The visa query use case and all components that serve it.
 
 The document ingestion use case.
 
-- `DocumentIngestionService` — receives an `IngestDocumentCommand` and delegates to infrastructure for parsing, chunking, embedding, and persistence; the service itself contains no parsing or I/O logic
+- `DocumentIngestionService` — receives an `IngestDocumentCommand` and delegates to infrastructure for parsing, chunking, embedding, and persistence; the service itself contains no parsing or I/O logic; also handles version supersession (deactivating a prior document when re-ingesting a changed source)
+
+#### `application/monitoring`
+
+Source-change detection (Sprint 7) — approved as a new sub-package via `AskUserQuestion` since it wasn't in the original package list.
+
+- `SourceChangeMonitor` — `@Scheduled` job; fetches each active document's `sourceUrl`, hashes it the same way ingestion does, and logs `UNCHANGED`/`CHANGED`/`FETCH_FAILED` to `SourceCheckLogRepository`; never writes to the knowledge base itself
+- `PendingChangeQueryService` — read side for `GET /api/v1/ingestion/pending-changes`
+
+#### `application/applicant`
+
+The applicant-profile use cases (Phase B) — approved as a new sub-package the same way `application/monitoring` was.
+
+- `ApplicantProfileService` — finds or lazily creates an applicant's profile and sets one field, converting the submitted value into the field's declared type
+- `ApplicantProfileVerificationService` — applies a confirm/correct/reject decision to one field; the only place a field's `VerificationStatus` changes
+- `ApplicantFieldValueParser` — public (a second caller, `application/document/ExtractedFieldConfirmationService`, needed it outside `application/applicant`); the single field-path-to-Java-type mapping every caller shares, so it can't drift between them
+
+#### `application/document`
+
+Passport document intelligence (Phase C) — approved as a new sub-package the same way `application/monitoring` and `application/applicant` were. Implements the safety principle *AI extracts → system validates → applicant verifies → only then trusted downstream*: nothing this package returns is written into an `ApplicantProfile` except through `ExtractedFieldConfirmationService`, and every extracted candidate starts `VerificationStatus.UNVERIFIED` regardless of confidence.
+
+- `DocumentIntelligenceService` — the upload-to-candidates pipeline: stores the image, runs the image-quality gate, then reads fields from two independent sources — MRZ OCR (checksum-validated, via `MrzParser`) and vision-model extraction (validated via `PassportFieldValidator`, self-reported readability) — and cross-checks the fields both sources supply (passport number, DOB, expiry). Agreement keeps the MRZ candidate; disagreement writes neither under the plain `ApplicantProfile.PATH_*` key — both surface instead under `path + ".conflict.mrz"` / `".conflict.visual"` so a conflict is never silently resolved. See §5.4.
+- `ExtractedFieldConfirmationService` — the only path by which a document-derived candidate ever reaches an `ApplicantProfile`: loads the source `ApplicantDocument`, writes each field the applicant accepted as `USER_CONFIRMED` with `confidence = 1.0` (superseding whatever MRZ/visual confidence it carried), and marks the document confirmed
 
 #### `application/command`
 
@@ -171,6 +231,10 @@ Immutable input objects passed from `presentation` to `application`.
 
 - `VisaQueryCommand` — query text, passport ISO, destination ISO, optional visa type code
 - `IngestDocumentCommand` — document path or URL, metadata fields
+- `SetApplicantFieldCommand` — applicant id, field path, submitted value
+- `VerifyApplicantFieldCommand` — applicant id, field path, action (`CONFIRM`/`CORRECT`/`REJECT`), optional corrected value
+- `UploadApplicantDocumentCommand` — applicant id, `DocumentType`, raw image bytes (defensively copied)
+- `ConfirmExtractedFieldsCommand` — applicant id, document id, accepted field values (only what the applicant chose to keep)
 
 #### `application/result`
 
@@ -178,6 +242,8 @@ Immutable output objects returned from `application` to `presentation`.
 
 - `VisaQueryResult` — answer text, citations, confidence score, model ID, latency
 - `IngestionResult` — document ID, chunk count, status
+- `ApplicantProfileResult` — the 7 grouped `*Info` views plus id/applicantId/lastModifiedAt; static factory `from(ApplicantProfile)`
+- `DocumentExtractionResult` — one of `QUALITY_REJECTED` (fixed rejection message) or `EXTRACTED` (field candidates keyed by `ApplicantProfile.PATH_*`, except conflicted fields — see `path + ".conflict.mrz"`/`".conflict.visual"` above)
 
 #### `application/port`
 
@@ -188,6 +254,10 @@ Outbound port interfaces defined by the application layer and implemented by inf
 - `ChatPort` — `generate(prompt: String, modelId: String): String`
 - `DocumentParsingPort` — `parse(source: DocumentSource): String`
 - `DocumentChunkingPort` — `chunk(text: String, metadata: DocumentMetadata): List<Chunk>`
+- `ImageQualityPort` — `assess(imageBytes: byte[]): ImageQualityAssessment` — pre-OCR blur/lighting/glare/skew/MRZ-readability gate
+- `OcrPort` — `extractText(imageBytes: byte[]): String` — whole-image OCR; `MrzParser` locates the MRZ lines within the result
+- `VisionExtractionPort` — `extract(imageBytes: byte[]): VisualPassportData` — reads visual-page fields via a multimodal chat model
+- `DocumentStoragePort` — `store(applicantId: UUID, documentId: UUID, imageBytes: byte[]): String` — persists raw uploaded bytes, returns a storage reference
 
 ### `domain`
 
@@ -203,6 +273,17 @@ Pure Java. Zero Spring, JPA, or infrastructure dependencies. No framework annota
 - `DocumentMetadata` — record; country, visaType, passport, source URL, lastUpdated, version
 - `ScoredChunk` — record; a `Chunk` with a `double fusionScore` from RRF
 - `MetadataFilter` — record; passport ISO, destination ISO, optional visa type code — passed to both retrieval paths before scoring
+- `SourceCheckLog` — record; one source-change-monitor check result (`UNCHANGED`/`CHANGED`/`FETCH_FAILED`)
+- `ApplicantProfile` — aggregate root (Phase B); a generic `Map<String, ExtractedField<?>>` keyed by canonical dot-paths, not nested storage — `confirmField`/`correctField`/`rejectField` operate uniformly on any path this way. `PersonalInfo`, `PassportInfo`, `NationalityInfo`, `AddressInfo`, `FamilyInfo`, `EmploymentInfo`, `TravelInfo` are read-only views assembled from the map on demand, not the actual storage
+- `ExtractedField<T>` — record; provenance wrapper (extracted value, normalized value, confidence, source document id, `VerificationStatus`) around every profile field value except `purposeOfVisit`
+- `VerificationStatus` — enum; `UNVERIFIED`, `USER_CONFIRMED`, `USER_CORRECTED`, `REJECTED`
+- `Address` — record; the composite value type inside `AddressInfo`
+- `ApplicantDocument` — entity (Phase C); an uploaded document moving through `UPLOADED` → `QUALITY_REJECTED` / `EXTRACTED` → `CONFIRMED`
+- `DocumentType` — enum; only `PASSPORT` exists so far
+- `DocumentProcessingStatus` — enum; `ApplicantDocument`'s lifecycle states, above
+- `ImageQualityAssessment` / `ImageQualityIssue` — record / enum; pre-OCR quality-gate outcome and specific failure reasons (`BLURRY`, `SKEWED`, `POOR_LIGHTING`, `GLARE_OR_SHADOW`, `MRZ_NOT_READABLE`)
+- `MrzData` — record; TD3 machine-readable-zone fields plus per-field and composite ICAO 9303 check-digit validity; a failed checksum doesn't discard the value, it's still returned for the caller to weigh
+- `VisualPassportData` / `VisualFieldReading` — record / record; fields read off the visual (non-MRZ) passport page by the vision model, each carrying the model's self-reported per-field readability instead of a checksum
 
 #### `domain/repository`
 
@@ -210,10 +291,15 @@ Interface contracts implemented in `infrastructure/persistence`.
 
 - `DocumentRepository` — CRUD for `Document` aggregates and `Chunk` entities
 - `VisaQueryLogRepository` — append-only audit log writes
+- `SourceCheckLogRepository` — append-only source-check-result writes/reads
+- `ApplicantProfileRepository` — CRUD for `ApplicantProfile` aggregates; one profile per applicant
+- `ApplicantDocumentRepository` — CRUD for `ApplicantDocument` entities
 
 #### `domain/service`
 
 - `ConfidenceScorer` — domain service; computes a `[0.0, 1.0]` score from a `RetrievedContext` using mean fusion score, chunk count, keyword match ratio, and document recency; operates only on plain Java types
+- `MrzParser` — locates and parses a TD3 machine-readable zone out of raw OCR text; validates every ICAO 9303 check digit (per-field plus composite)
+- `PassportFieldValidator` — format/plausibility checks for visual-page fields (date ranges, passport-number format, passport-type label, place-of-birth length); has no equivalent for MRZ fields, whose trust signal is the check digit instead
 
 ### `infrastructure`
 
@@ -221,9 +307,9 @@ Implements domain repository interfaces and application port interfaces. May imp
 
 #### `infrastructure/persistence`
 
-- JPA `@Entity` classes (`DocumentJpaEntity`, `ChunkJpaEntity`, `QueryAuditJpaEntity`, `CountryJpaEntity`, `VisaTypeJpaEntity`)
+- JPA `@Entity` classes (`DocumentJpaEntity`, `ChunkJpaEntity`, `QueryAuditJpaEntity`, `CountryJpaEntity`, `VisaTypeJpaEntity`, `SourceCheckLogJpaEntity`, `ApplicantProfileJpaEntity`, `ExtractedFieldJpaEntity`, `ApplicantDocumentJpaEntity`)
 - Spring Data `JpaRepository` interfaces
-- Adapter classes that implement `DocumentRepository` and `VisaQueryLogRepository` by delegating to the Spring Data repositories
+- Adapter classes that implement the domain repositories by delegating to the Spring Data repositories, including `ApplicantProfileRepositoryAdapter` — persists `ApplicantProfile`'s field map as one `ExtractedFieldJpaEntity` row per field (relational, not JSON), replacing all rows on every save rather than diffing individual changes — and `ApplicantDocumentRepositoryAdapter`
 - Flyway migration SQL files live in `src/main/resources/db/migration/`
 
 #### `infrastructure/vectorstore`
@@ -245,6 +331,10 @@ Implements domain repository interfaces and application port interfaces. May imp
 - `FileSystemDocumentLoader` — reads raw bytes from `knowledge-base/` on the local filesystem
 - `UrlDocumentLoader` — fetches official documents from configured URLs
 - `MetadataExtractor` — reads sidecar JSON frontmatter and constructs `DocumentMetadata`
+- `FileSystemApplicantDocumentStore` — implements `DocumentStoragePort`; writes uploaded passport images under `applicant-documents.storage-root`
+- `quality/ImageQualityAnalyzer` — implements `ImageQualityPort`; plain-Java (no OpenCV/native CV library) pixel-level heuristics — Laplacian-variance blur, mean-brightness lighting, saturated-pixel glare/shadow, projection-profile skew, MRZ-band edge-density readability
+- `ocr/TesseractOcrAdapter` — implements `OcrPort`; self-hosted Tesseract via Tess4J, whole-image OCR (no region cropping)
+- `vision/VisionPassportExtractionAdapter` — implements `VisionExtractionPort`; reuses the same Spring AI `ChatModel` bean `ChatAdapter` uses for RAG answers (no separate provider/API key) with a fixed JSON-contract prompt asking for the six visual-page fields; parses defensively (strips markdown code fences, degrades to `VisualPassportData.empty()` on any parse failure or model-call exception, never throws) — see §5.4 for why this matters under the `ollama` profile specifically
 
 ---
 
@@ -328,6 +418,77 @@ DocumentIngestionService (application/ingestion)
   ▼
 IngestionController → IngestionResponse DTO → Client
 ```
+
+### 5.3 Applicant Profile Flow (Phase B)
+
+```
+Client
+  │  POST /api/v1/applicants/{applicantId}/profile/fields  { "fieldPath": "...", "value": ... }
+  ▼
+ApplicantProfileController → build SetApplicantFieldCommand
+  ▼
+ApplicantProfileService (application/applicant)
+  │  1. ApplicantProfileRepository.findByApplicantId(applicantId) → existing profile, or create a new one
+  │  2. ApplicantFieldValueParser.parseTypedValue(fieldPath, value) → typed Java value
+  │  3. ApplicantProfile.setField(fieldPath, ExtractedField.selfDeclared(value))  [or setPurposeOfVisit for that one path]
+  │  4. ApplicantProfileRepository.save(profile) → one ExtractedFieldJpaEntity row per field
+  │  5. ApplicantProfileResult.from(profile)
+  ▼
+ApplicantProfileController → ApplicantProfileResponse DTO → Client
+
+Verification is the same shape, via ApplicantProfileVerificationService:
+POST /api/v1/applicants/{applicantId}/profile/fields/verify
+  { "fieldPath": "...", "action": "CONFIRM" | "CORRECT" | "REJECT", "correctedValue": ... }
+  → ApplicantProfile.confirmField / correctField / rejectField
+```
+
+Every value set through `POST .../fields` is self-declared (typed directly by the applicant, no source document) and starts `USER_CONFIRMED`. `applicantId` is an opaque, unauthenticated `UUID` — neither this flow's application nor domain code inspects how it was obtained, so a future auth layer changes only the controller.
+
+### 5.4 Document Intelligence Flow (Phase C)
+
+The caller below is `ApplicantDocumentController` (`POST .../documents/passport` and `POST .../documents/{documentId}/confirm` — see `docs/api.md`), or a test constructing the commands directly.
+
+```
+Caller
+  │  UploadApplicantDocumentCommand { applicantId, documentType=PASSPORT, imageBytes }
+  ▼
+DocumentIntelligenceService (application/document)
+  │  1. DocumentStoragePort.store(...) → ApplicantDocument{status=UPLOADED} saved
+  │  2. ImageQualityPort.assess(imageBytes)
+  │       FAIL → ApplicantDocument.rejectForQuality() → DocumentExtractionResult.qualityRejected(...)  [STOP]
+  │       PASS → continue
+  │  3. OcrPort.extractText(imageBytes) → MrzParser.parse(...) → MrzData (or empty → treated as quality-reject too)
+  │  4. buildMrzFieldCandidates(MrzData)
+  │       passportNumber/dateOfBirth/expiryDate → own check digit → 0.95 / 0.40
+  │       fullName/gender/issuingCountry/nationality → composite check digit → 0.95 / 0.40
+  │  5. VisionExtractionPort.extract(imageBytes) → VisualPassportData (never throws; degrades to empty on failure)
+  │  6. buildVisualFieldCandidates(VisualPassportData)
+  │       PassportFieldValidator checks each field; not-found/unparseable → no candidate (never a guess)
+  │       fails validation → 0.40 (LOW) | passes + not clearlyReadable → 0.70 (MEDIUM) | passes + clearlyReadable → 0.90 (HIGH)
+  │  7. mergeWithCrossValidation(mrzCandidates, visualCandidates)
+  │       path in one source only → passed through unchanged
+  │       both sources agree → MRZ candidate kept (checksum-backed, stronger signal); visual reading discarded
+  │       both sources disagree → NEITHER written under the plain path; both surface as
+  │                                 path+".conflict.mrz" / path+".conflict.visual", still UNVERIFIED
+  │  8. ApplicantDocument.markExtracted() → DocumentExtractionResult.extracted(candidates)
+  ▼
+Caller reviews candidates with the applicant, then:
+
+ConfirmExtractedFieldsCommand { applicantId, documentId, fields: { path → finalValue, ... } }
+  ▼
+ExtractedFieldConfirmationService (application/document)
+  │  for each accepted field: ApplicantProfile.setField(path, ExtractedField(value, value, confidence=1.0,
+  │                                                        documentId, VerificationStatus.USER_CONFIRMED))
+  │  ApplicantDocument.confirm() → ApplicantDocumentRepository.save(...)
+  ▼
+ApplicantProfileResult.from(profile) → Caller
+```
+
+**All confidence values above are heuristic/provisional extraction-signal strengths, not statistically calibrated probabilities** — `0.95` means "the MRZ check digit for this value matched," not "95% likely correct." No confidence value, however high, ever changes `VerificationStatus` on its own; every extracted candidate starts and stays `UNVERIFIED` until step 9 (`ExtractedFieldConfirmationService`) runs, which is the only place a document-derived field can reach `USER_CONFIRMED`.
+
+**Vision-model requirement:** step 5 needs a genuinely multimodal chat model behind the app's single `ChatModel` bean. Under the default `openai` profile that's `gpt-4o-mini` (vision-capable). Under the `ollama` profile, this was initially configured as `gemma4:latest`, which does **not** work for this — verified live (not assumed): its own Ollama capability metadata claims `vision` and it carries real vision-tower GGUF tensors, but three independent live tests (through `VisionPassportExtractionAdapter`, and raw `curl` against both `/api/generate` and `/api/chat` with a byte-verified-correct image payload) all showed it failing to actually consume the image — it either reports no image was given, or hallucinates the raw bytes as garbled text. This was root-caused to Ollama's handling of this specific model tag, not to Spring AI (`OllamaChatModel` is verified correct at the bytecode level — it does convert `UserMessage.getMedia()` into Ollama's native `images` field) or to the adapter (unchanged by this finding; it's written purely against `ChatModel`/`UserMessage`/`Media`, so it already works correctly with any genuinely multimodal model behind either provider).
+
+**Resolved (2026-09-02):** the `ollama` profile now configures `llava:7b` instead. Verified live end-to-end — through the real adapter against a real local Ollama instance, with a synthetic (not real) test passport image — `llava:7b` genuinely consumed the image and returned all 6 fields in the adapter's expected JSON shape, 5 of them matching the source image exactly (one digit dropped from the passport number, one date field misread — ordinary OCR-accuracy error, not the "never saw the image" failure mode `gemma4:latest` had). See `VisionPassportExtractionAdapterOllamaLiveIT` (opt-in, `-Dlive-ollama=true`) and `PROGRESS.md`'s 2026-09-02 entry for the full result and remaining limitations (not yet run against a real scanned passport photo, only the synthetic rendered one).
 
 ---
 
@@ -441,7 +602,16 @@ V2__create_visa_types.sql
 V3__create_documents.sql
 V4__create_document_chunks.sql
 V5__create_query_audit.sql
+V6__seed_reference_data.sql
+V7__add_additional_india_visa_types.sql
+V8__add_general_visa_type.sql
+V9__create_source_check_log.sql
+V10__create_applicant_profiles.sql
+V11__create_extracted_fields.sql
+V12__create_applicant_documents.sql
 ```
+
+**V13 (FK: `extracted_fields.source_document_id` → `applicant_documents.id`) is planned but not yet created** — deliberately gated until the Phase C implementation above and its tests were passing, per the plan that produced it. See `PROGRESS.md`'s Phase C section.
 
 `spring.jpa.hibernate.ddl-auto` is set to `validate` in production — Hibernate validates the schema against JPA entities but never modifies it. Flyway is the sole schema authority.
 
@@ -515,7 +685,51 @@ CREATE TABLE query_audit (
 );
 
 CREATE INDEX idx_audit_created ON query_audit(created_at DESC);
+
+-- V10__create_applicant_profiles.sql
+CREATE TABLE applicant_profiles (
+    id               UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    applicant_id     UUID         NOT NULL,
+    purpose_of_visit TEXT,
+    created_at       TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    last_modified_at TIMESTAMPTZ  NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX idx_applicant_profiles_applicant ON applicant_profiles(applicant_id);
+
+-- V11__create_extracted_fields.sql
+CREATE TABLE extracted_fields (
+    id                   UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    applicant_profile_id UUID         NOT NULL REFERENCES applicant_profiles(id) ON DELETE CASCADE,
+    source_document_id   UUID,
+    field_path           VARCHAR(200) NOT NULL,
+    extracted_value      TEXT         NOT NULL,
+    normalized_value     TEXT         NOT NULL,
+    confidence           NUMERIC(4,3) NOT NULL CHECK (confidence >= 0.0 AND confidence <= 1.0),
+    verification_status  VARCHAR(20)  NOT NULL
+        CHECK (verification_status IN ('UNVERIFIED', 'USER_CONFIRMED', 'USER_CORRECTED', 'REJECTED')),
+    created_at           TIMESTAMPTZ  NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_extracted_fields_profile ON extracted_fields(applicant_profile_id);
+CREATE UNIQUE INDEX idx_extracted_fields_profile_path ON extracted_fields(applicant_profile_id, field_path);
+
+-- V12__create_applicant_documents.sql
+CREATE TABLE applicant_documents (
+    id            UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    applicant_id  UUID         NOT NULL,
+    document_type VARCHAR(30)  NOT NULL
+        CHECK (document_type IN ('PASSPORT')),
+    storage_path  TEXT         NOT NULL,
+    uploaded_at   TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    status        VARCHAR(20)  NOT NULL
+        CHECK (status IN ('UPLOADED', 'QUALITY_REJECTED', 'EXTRACTED', 'CONFIRMED'))
+);
+
+CREATE INDEX idx_applicant_documents_applicant ON applicant_documents(applicant_id);
 ```
+
+`extracted_fields.source_document_id` has no foreign key yet — `applicant_documents` didn't exist when V11 was written; it does now, so the FK (V13) is planned but deliberately not yet created, see above. `ApplicantProfileRepositoryAdapter` replaces every `extracted_fields` row for a profile on each save rather than diffing changes, so `created_at` on that table reflects "last synced," not true original creation — an accepted limitation, since nothing in Phase B reads that column for anything load-bearing.
 
 ### 7.3 Qdrant Collection
 
@@ -546,17 +760,21 @@ All payload fields are indexed. Filters on `passport_iso`, `destination_iso`, an
 
 ## 8. Future Roadmap
 
+> This section's Phase 1–5 numbering is the original pre-implementation roadmap and is unrelated to the Visa Application Assistant's own Phase A–G roadmap in `docs/VISA_APPLICATION_ASSISTANT_PROPOSAL.md` §9 — don't conflate the two.
+
 ### Phase 1 — Current (Bangladesh → India MVP)
 
 - [x] Spring Boot 3.5.x project scaffold
-- [ ] Clean Architecture package structure
-- [ ] Flyway schema migrations
-- [ ] Docker Compose (app + PostgreSQL + Qdrant)
-- [ ] Document ingestion pipeline (PDF + Tika)
-- [ ] Qdrant integration via Spring AI
-- [ ] Hybrid retrieval with pre-filtered vector + full-text search
-- [ ] Visa query REST endpoint with citations
-- [ ] Confidence scoring and fallback response
+- [x] Clean Architecture package structure
+- [x] Flyway schema migrations
+- [x] Docker Compose (app + PostgreSQL + Qdrant)
+- [x] Document ingestion pipeline (PDF + Tika)
+- [x] Qdrant integration via Spring AI
+- [x] Hybrid retrieval with pre-filtered vector + full-text search
+- [x] Visa query REST endpoint with citations
+- [x] Confidence scoring and fallback response
+
+Phase 1 (Sprints 1–7) is complete as of 2026-08-19 — see `PROGRESS.md` for the sprint-by-sprint history. The Visa Application Assistant's Phase B (Applicant Profile, 2026-08-31) and Phase C (Passport Document Intelligence, 2026-09-01 — MRZ + vision extraction, cross-field validation, upload/confirm controller endpoints; `ollama` profile's vision model resolved to `llava:7b`, see §5.4) are also now complete, ahead of this section's own Phase 2/3, since both were scoped and approved separately — see `docs/VISA_APPLICATION_ASSISTANT_PROPOSAL.md`.
 
 ### Phase 2 — Multi-Country Support
 

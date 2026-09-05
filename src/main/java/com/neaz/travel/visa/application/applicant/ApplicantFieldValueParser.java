@@ -12,15 +12,17 @@ import java.util.Map;
  * field path declares. Shared by {@link ApplicantProfileService} (setting a
  * field) and {@link ApplicantProfileVerificationService} (correcting one) so
  * the field-path-to-type mapping exists in exactly one place — same
- * rationale as {@code common.util.Sha256Hasher}, scoped to this package
- * since both callers live here.
+ * rationale as {@code common.util.Sha256Hasher}. Public since
+ * {@code application.document.ExtractedFieldConfirmationService} is now a
+ * second caller outside this package, for the same reason: one source of
+ * truth for the field-path-to-type mapping.
  */
-final class ApplicantFieldValueParser {
+public final class ApplicantFieldValueParser {
 
     private ApplicantFieldValueParser() {
     }
 
-    static Object parseTypedValue(String fieldPath, Object value) {
+    public static Object parseTypedValue(String fieldPath, Object value) {
         return switch (fieldPath) {
             case ApplicantProfile.PATH_PERSONAL_DATE_OF_BIRTH,
                  ApplicantProfile.PATH_PASSPORT_ISSUE_DATE,

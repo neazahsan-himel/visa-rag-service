@@ -1,6 +1,6 @@
 # API Reference — Visa RAG Service
 
-Three endpoints exist today: document ingestion, source-change review (both curator-facing), and visa query (client-facing). All live under `/api/v1` and share one response envelope.
+Six endpoints exist today: document ingestion, source-change review (both curator-facing), visa query (client-facing), and the applicant-profile trio — set a field, read a profile, verify a field (client-facing, Phase B of the Visa Application Assistant — see [`docs/VISA_APPLICATION_ASSISTANT_PROPOSAL.md`](VISA_APPLICATION_ASSISTANT_PROPOSAL.md)). All live under `/api/v1` and share one response envelope.
 
 ---
 
@@ -219,6 +219,232 @@ See [Error Responses](#error-responses).
 
 ---
 
+## POST /api/v1/applicants/{applicantId}/profile/fields
+
+Sets one field on an applicant's profile. `applicantId` is an opaque, caller-supplied UUID — there is no authentication yet (see [Applicant Identity](#applicant-identity) below). If the applicant has no profile yet, one is created implicitly on the first field set.
+
+Every value set through this endpoint is self-declared (typed directly by the applicant, not extracted from an uploaded document) and is immediately `USER_CONFIRMED` — there is nothing to verify a person's own unmediated input against.
+
+### Request Body
+
+```json
+{
+  "fieldPath": "personalInfo.fullName",
+  "value": "Jane Doe"
+}
+```
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `fieldPath` | string | yes | One of `ApplicantProfile`'s canonical dot-paths — see [Field Paths](#field-paths) below. |
+| `value` | string \| number \| object | yes | A plain string/number for most fields; a nested object (`line1`/`line2`/`city`/`postalCode`/`countryIso`) for the two address fields. Date fields take an ISO-8601 (`yyyy-MM-dd`) string. |
+
+Example — setting an address field:
+
+```json
+{
+  "fieldPath": "addressInfo.permanentAddress",
+  "value": { "line1": "House 1, Road 2", "city": "Dhaka", "postalCode": "1200", "countryIso": "BD" }
+}
+```
+
+### Response — 200 OK
+
+Returns the full profile after the update — see [Profile Response Shape](#profile-response-shape) below.
+
+### Errors
+
+An unknown `fieldPath` or a `value` that doesn't match the field's declared type (e.g. a non-date string for a date field) returns `400 Bad Request` — see [Error Responses](#error-responses).
+
+---
+
+## GET /api/v1/applicants/{applicantId}/profile
+
+Reads an applicant's full profile.
+
+### Response — 200 OK
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "d4e1a2b3-...",
+    "applicantId": "6f2c9e10-...",
+    "personalInfo": {
+      "fullName": {
+        "extractedValue": "Jane Doe",
+        "normalizedValue": "Jane Doe",
+        "confidence": 1.0,
+        "sourceDocumentId": null,
+        "verificationStatus": "USER_CONFIRMED"
+      },
+      "dateOfBirth": null,
+      "gender": null,
+      "placeOfBirth": null
+    },
+    "passportInfo": { "passportNumber": null, "issuingCountry": null, "issueDate": null, "expiryDate": null, "passportType": null },
+    "nationalityInfo": { "nationality": null, "previousNationality": null },
+    "addressInfo": { "permanentAddress": null, "currentAddress": null },
+    "familyInfo": { "fatherName": null, "motherName": null, "spouseName": null, "maritalStatus": null },
+    "employmentInfo": { "occupation": null, "employerName": null, "employerAddress": null, "monthlyIncome": null },
+    "travelInfo": { "purposeOfVisit": null, "intendedArrivalDate": null, "intendedDurationDays": null, "portOfEntry": null },
+    "lastModifiedAt": "2026-08-31T12:00:00Z"
+  },
+  "message": null,
+  "timestamp": "2026-08-31T12:00:00Z"
+}
+```
+
+A field that hasn't been set yet is `null` in its group, not omitted — every group is always present with all its keys.
+
+### Errors
+
+No profile exists yet for `applicantId` → `404 Not Found` — see [Error Responses](#error-responses).
+
+---
+
+## POST /api/v1/applicants/{applicantId}/profile/fields/verify
+
+Applies a verification decision to one already-set field: accept it as-is, replace it with a corrected value, or reject it outright. This is the only way a field's `verificationStatus` changes after it was first set — see [Verification Workflow](#verification-workflow) below.
+
+### Request Body
+
+```json
+{
+  "fieldPath": "personalInfo.fullName",
+  "action": "CORRECT",
+  "correctedValue": "Jane D. Doe"
+}
+```
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `fieldPath` | string | yes | The field being verified; must already have a value set. |
+| `action` | string | yes | One of `"CONFIRM"`, `"CORRECT"`, `"REJECT"`. |
+| `correctedValue` | string \| number \| object | only for `CORRECT` | Same shape rules as `value` on the set-field endpoint. Must be omitted for `CONFIRM`/`REJECT`. |
+
+### Response — 200 OK
+
+Returns the full profile after the update — see [Profile Response Shape](#profile-response-shape) above.
+
+### Errors
+
+- `applicantId` has no profile → `404 Not Found`.
+- `fieldPath` was never set on the profile → `400 Bad Request` (`"No value set for field '...'; cannot verify a field that hasn't been set"`).
+- `action`/`correctedValue` mismatch (e.g. `CORRECT` with no `correctedValue`), or `correctedValue` doesn't match the field's declared type → `400 Bad Request`.
+
+See [Error Responses](#error-responses).
+
+---
+
+## Profile Response Shape
+
+All three applicant-profile endpoints return the same shape: `id`, `applicantId`, the seven grouped sections (`personalInfo`, `passportInfo`, `nationalityInfo`, `addressInfo`, `familyInfo`, `employmentInfo`, `travelInfo`), and `lastModifiedAt`. Every field inside a group is either `null` (not set yet) or an object with:
+
+| Field | Type | Notes |
+|---|---|---|
+| `extractedValue` | varies | The value as originally submitted/extracted, before normalization. Preserved even after a correction, for audit. |
+| `normalizedValue` | varies | The canonical value — what a future consumer (checklist, form preparation) should read. |
+| `confidence` | number, `[0.0, 1.0]` | `1.0` for every field set through Phase B (self-declared); will vary once Phase C (OCR extraction) exists. |
+| `sourceDocumentId` | UUID \| null | `null` for every field set through Phase B — there is no document upload yet (Phase C). |
+| `verificationStatus` | string | `"UNVERIFIED"`, `"USER_CONFIRMED"`, `"USER_CORRECTED"`, or `"REJECTED"`. |
+
+`travelInfo.purposeOfVisit` is the one exception — a plain string (or `null`), not an object, since it's free text with no provenance to track.
+
+### Field Paths
+
+```
+personalInfo.fullName          personalInfo.dateOfBirth       personalInfo.gender            personalInfo.placeOfBirth
+passportInfo.passportNumber    passportInfo.issuingCountry    passportInfo.issueDate         passportInfo.expiryDate        passportInfo.passportType
+nationalityInfo.nationality    nationalityInfo.previousNationality
+addressInfo.permanentAddress   addressInfo.currentAddress
+familyInfo.fatherName          familyInfo.motherName          familyInfo.spouseName           familyInfo.maritalStatus
+employmentInfo.occupation      employmentInfo.employerName    employmentInfo.employerAddress  employmentInfo.monthlyIncome
+travelInfo.intendedArrivalDate travelInfo.intendedDurationDays travelInfo.portOfEntry         travelInfo.purposeOfVisit
+```
+
+### Verification Workflow
+
+A field set via `POST .../profile/fields` is self-declared and starts `USER_CONFIRMED` (see that endpoint above). Phase C (passport document intelligence) produces genuinely `UNVERIFIED` candidates from MRZ/vision extraction (see [Document Intelligence](#document-intelligence-phase-c) below): an extracted field starts `UNVERIFIED`, and nothing downstream treats it as trustworthy until the applicant reviews it via the document flow's own confirm endpoint, which writes `USER_CONFIRMED` directly (this verify endpoint operates on fields already set on the profile, not on document candidates).
+
+### Applicant Identity
+
+`applicantId` is an opaque UUID with **no authentication or authorization** in Phase B — any caller who knows or guesses an `applicantId` can read and modify that profile. This is a deliberate, scoped-down starting point (see `docs/VISA_APPLICATION_ASSISTANT_PROPOSAL.md` §1), not an oversight: `domain`/`application` code never inspects how `applicantId` was obtained, so a future auth layer only needs to change how the controller derives it, not the layers beneath it.
+
+---
+
+## Document Intelligence (Phase C)
+
+The passport-upload-to-candidates pipeline (`DocumentIntelligenceService`, `ExtractedFieldConfirmationService` in `application/document`) has two production endpoints below, plus a diagnostic vision-only endpoint. Requires Tesseract OCR configured (`ocr.tesseract.data-path` / `TESSDATA_PATH`) — the upload endpoint runs MRZ extraction before vision and rejects the upload if that fails, so it can't be exercised until Tesseract is set up on the host running the app.
+
+- Uploading a passport image runs it through an image-quality gate, then two independent extraction sources — MRZ OCR (checksum-validated) and vision-model reading of the printed page (validated, self-reported readability) — cross-checked against each other where both supply the same field (passport number, DOB, expiry).
+- Every candidate starts `UNVERIFIED`, regardless of confidence — confidence values are documented as heuristic/provisional extraction-signal strength, never a calibrated probability, and never on their own promote a field to verified.
+- When MRZ and vision disagree on a field, neither is written under that field's normal path — both are exposed under `path + ".conflict.mrz"` / `path + ".conflict.visual"` instead, so a human resolves it rather than one source silently winning.
+- Confirmation behaves exactly like the existing verify endpoint above: `confidence` becomes `1.0` and `VerificationStatus` becomes `USER_CONFIRMED`.
+- Under the `ollama` profile, the vision-extraction step runs against `llava:7b` (the profile's current default, replacing `gemma4:latest`, which was verified not to work for this) — see `PROGRESS.md`'s Phase C section and `docs/ARCHITECTURE.md` §5.4 for the live verification of both findings.
+
+### POST /api/v1/applicants/{applicantId}/documents/passport
+
+Multipart upload (`file` field, a passport image). Runs the full pipeline described above and returns field candidates for the applicant to review — nothing is written to the applicant's profile yet.
+
+```bash
+curl -X POST http://localhost:8081/api/v1/applicants/$(uuidgen)/documents/passport \
+  -F "file=@/path/to/passport.jpg"
+```
+
+Response — 200 OK:
+
+```json
+{
+  "documentId": "b3f...",
+  "status": "EXTRACTED",
+  "message": null,
+  "fieldCandidates": {
+    "passportInfo.passportNumber": { "value": "A1234567", "confidence": 0.95, "verificationStatus": "UNVERIFIED" }
+  }
+}
+```
+
+`status` is `"EXTRACTED"` (candidates present) or `"QUALITY_REJECTED"` (image too degraded to OCR reliably, or no MRZ could be located — `message` explains why, `fieldCandidates` is empty). A field key ending `.conflict.mrz` / `.conflict.visual` means the two sources disagreed on that field; resolve it before confirming.
+
+### POST /api/v1/applicants/{applicantId}/documents/{documentId}/confirm
+
+Applies the applicant's review of a document's field candidates to their profile. `documentId` comes from the upload response above.
+
+```json
+{
+  "fields": {
+    "passportInfo.passportNumber": "A1234567"
+  }
+}
+```
+
+Only the candidates the applicant chose to keep go in `fields` — unchanged or edited; a discarded candidate is simply left out. Each included value is written to the profile as `USER_CONFIRMED` with `confidence` `1.0`, regardless of its original extraction confidence, and the source document is marked `CONFIRMED`.
+
+Response — 200 OK: the full profile, same shape as [Profile Response Shape](#profile-response-shape) above.
+
+### Errors
+
+- `documentId` doesn't exist, or belongs to a different `applicantId` → `404 Not Found` (both cases return the same error, to avoid leaking whether a document ID exists for another applicant).
+- `fields` is empty → `400 Bad Request`.
+
+See [Error Responses](#error-responses).
+
+### Vision Preview (diagnostic, Phase C)
+
+`POST /api/v1/applicants/{applicantId}/documents/passport/vision-preview` — multipart upload (`file` field, an image). **Not the production upload flow above.** Calls `VisionExtractionPort` directly — bypasses the image-quality gate, OCR, MRZ parsing, and persistence entirely — so it can be used to check what the configured vision model (`llava:7b` under `ollama`, `gpt-4o-mini` under `openai`) reads off a real image before Tesseract is set up. `applicantId` only keeps the URL shape consistent with the rest of this API; nothing is stored or associated with that applicant.
+
+```bash
+curl -X POST http://localhost:8081/api/v1/applicants/$(uuidgen)/documents/passport/vision-preview \
+  -F "file=@/path/to/passport.jpg"
+```
+
+Response shape mirrors `VisualPassportData` — six fields (`passportNumber`, `dateOfBirth`, `expiryDate`, `issueDate`, `placeOfBirth`, `passportType`), each `{ "value": string|null, "present": boolean, "clearlyReadable": boolean }`. Live-verified against a real local Ollama + `llava:7b` and a real HTTP multipart upload — see `PROGRESS.md`'s 2026-09-02 entry. Per-field accuracy varies between runs (observed: correct on one run, two fields shifted onto the wrong keys on another) — this is a diagnostic tool for inspecting raw model output, not a substitute for the confirmation step the real pipeline requires before any value is trusted.
+
+Full design: [`docs/ARCHITECTURE.md`](ARCHITECTURE.md#54-document-intelligence-flow-phase-c), [`PROGRESS.md`](../PROGRESS.md#phase-c--passport-document-intelligence-core-done-2026-09-01).
+
+---
+
 ## Source Change Monitoring
 
 A scheduled job (`SourceChangeMonitor`, interval configurable via `source-monitoring.check-interval-ms`, default 24h) checks every active document that has a `sourceUrl`: it fetches the live content, hashes it the same way ingestion hashes stored content, and compares. Results are logged to `source_check_log` as `UNCHANGED`, `CHANGED`, or `FETCH_FAILED` — nothing is written to the knowledge base automatically.
@@ -242,6 +468,8 @@ All exceptions are translated by a single `@RestControllerAdvice` (`GlobalExcept
 |---|---|---|---|
 | Request body fails `@Valid` validation (e.g. blank `query`, missing `metadata`) | `400 Bad Request` | `null` | Joined field errors, e.g. `"query: must not be blank; passport: must not be blank"` |
 | A referenced `Document` id doesn't exist | `404 Not Found` | `null` | `"Document not found: <uuid>"` |
+| No `ApplicantProfile` exists for the requested `applicantId` | `404 Not Found` | `null` | `"Applicant profile not found for applicantId: <uuid>"` |
+| Malformed applicant-profile input — unknown `fieldPath`, a `value`/`correctedValue` that doesn't match the field's declared type, or verifying a field that was never set | `400 Bad Request` | `null` | The exception's own message |
 | Any other deliberate domain/application error (e.g. ingestion path escapes the knowledge-base root) | `400 Bad Request` | `null` | The exception's own message — safe to expose, since these are raised deliberately by application code, not leaked internals |
 | Anything unexpected — including unseeded country/visa-type reference data for the requested `destinationIso`/`visaTypeCode` | `500 Internal Server Error` | `null` | `"An unexpected error occurred. Please try again later."` — full details are logged server-side only, never returned to the client |
 

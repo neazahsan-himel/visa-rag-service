@@ -8,6 +8,8 @@ import com.neaz.travel.visa.domain.repository.ApplicantProfileRepository;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.HashMap;
@@ -90,7 +92,7 @@ public class ApplicantProfileRepositoryAdapter implements ApplicantProfileReposi
                 fieldPath,
                 serialize(fieldPath, field.extractedValue()),
                 serialize(fieldPath, field.normalizedValue()),
-                field.confidence(),
+                BigDecimal.valueOf(field.confidence()).setScale(3, RoundingMode.HALF_UP),
                 field.verificationStatus().name(),
                 Instant.now());
     }
@@ -100,7 +102,7 @@ public class ApplicantProfileRepositoryAdapter implements ApplicantProfileReposi
         return new ExtractedField<>(
                 deserialize(path, entity.getExtractedValue()),
                 deserialize(path, entity.getNormalizedValue()),
-                entity.getConfidence(),
+                entity.getConfidence().doubleValue(),
                 entity.getSourceDocumentId(),
                 VerificationStatus.valueOf(entity.getVerificationStatus()));
     }

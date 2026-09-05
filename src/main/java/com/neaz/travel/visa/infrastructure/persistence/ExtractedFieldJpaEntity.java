@@ -5,6 +5,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -18,6 +19,14 @@ import java.util.UUID;
  * has no FK constraint yet — {@code applicant_documents} doesn't exist
  * until Phase C. No {@code verifiedAt} column — {@code ExtractedField}
  * doesn't model one, and nothing in Phase B reads it.
+ *
+ * <p>{@code confidence} is {@link BigDecimal}, matching the column's {@code
+ * NUMERIC(4,3)} type exactly (the same pattern {@code QueryAuditJpaEntity}
+ * uses for its own confidence column) — a plain {@code double}/{@code float8}
+ * field here fails Hibernate's schema validation against a real Postgres
+ * instance. The domain's {@code ExtractedField.confidence()} stays a
+ * primitive {@code double}; {@code ApplicantProfileRepositoryAdapter} converts
+ * at this persistence boundary.
  */
 @Entity
 @Table(name = "extracted_fields")
@@ -42,8 +51,8 @@ public class ExtractedFieldJpaEntity {
     @Column(name = "normalized_value", nullable = false, columnDefinition = "TEXT")
     private String normalizedValue;
 
-    @Column(name = "confidence", nullable = false)
-    private double confidence;
+    @Column(name = "confidence", nullable = false, precision = 4, scale = 3)
+    private BigDecimal confidence;
 
     @Column(name = "verification_status", nullable = false, length = 20)
     private String verificationStatus;
@@ -56,7 +65,7 @@ public class ExtractedFieldJpaEntity {
     }
 
     public ExtractedFieldJpaEntity(UUID id, UUID applicantProfileId, UUID sourceDocumentId, String fieldPath,
-                                    String extractedValue, String normalizedValue, double confidence,
+                                    String extractedValue, String normalizedValue, BigDecimal confidence,
                                     String verificationStatus, Instant createdAt) {
         this.id = id;
         this.applicantProfileId = applicantProfileId;
@@ -93,7 +102,7 @@ public class ExtractedFieldJpaEntity {
         return normalizedValue;
     }
 
-    public double getConfidence() {
+    public BigDecimal getConfidence() {
         return confidence;
     }
 

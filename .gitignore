@@ -41,3 +41,10 @@ docs/SPRINT1_EXPLAINED.md
 docs/SPRINT2_EXPLAINED.md
 docs/SPRINT3_EXPLAINED.md
 docs/SPRINT4_EXPLAINED.md
+
+# Locally stored applicant document uploads (runtime data, not source)
+applicant-documents/
+
+# Tesseract OCR language data (runtime dependency, ~15MB binary — not source;
+# download eng.traineddata to the path configured via ocr.tesseract.data-path / TESSDATA_PATH)
+tessdata/

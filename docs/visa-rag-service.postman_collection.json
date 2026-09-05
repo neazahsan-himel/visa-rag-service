@@ -1,0 +1,220 @@
+{
+  "info": {
+    "name": "Visa RAG Service",
+    "_postman_id": "b6f2a2a0-6b1a-4b7a-9c1a-visa-rag-service",
+    "description": "Bangladesh passport -> India visa RAG service. Covers the RAG query/ingestion API, the applicant-profile API (Phase B), and the passport document-intelligence diagnostic endpoint (Phase C). See docs/api.md for full request/response shapes and docs/ARCHITECTURE.md for design notes.\n\nRun order for a fresh environment: Ingestion > Ingest Document, then Visa Query > Ask a Question. Applicant Profile and Applicant Document requests are independent of those and of each other, and share {{applicantId}} generated once by the collection pre-request script below.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8081", "type": "string" },
+    { "key": "applicantId", "value": "", "type": "string" }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "if (!pm.collectionVariables.get('applicantId')) {",
+          "    pm.collectionVariables.set('applicantId', pm.variables.replaceIn('{{$guid}}'));",
+          "}"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "Visa Query",
+      "item": [
+        {
+          "name": "Ask a Question",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"What documents do I need for an Indian tourist visa as a Bangladeshi passport holder?\",\n  \"passport\": \"BD\",\n  \"destination\": \"IN\",\n  \"visaType\": \"TOURIST\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/visa/query",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "visa", "query"]
+            },
+            "description": "Ask a visa question. visaType is optional; omit or set null to search across all visa types. A low-confidence match returns the fixed \"I couldn't find sufficient official information.\" fallback rather than a fabricated answer."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Ingestion",
+      "item": [
+        {
+          "name": "Ingest Document",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"path\": \"India/Tourist/hci-dhaka-visa-documents.md\",\n  \"title\": \"India Tourist Visa - Required Documents (HCI Dhaka)\",\n  \"metadata\": {\n    \"destinationIso\": \"IN\",\n    \"passportIso\": \"BD\",\n    \"visaTypeCode\": \"TOURIST\",\n    \"lastUpdated\": \"2026-01-01\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ingestion/documents",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "ingestion", "documents"]
+            },
+            "description": "path is resolved against knowledge-base.root (see application.properties) and must already exist under knowledge-base/. metadata.sourceUrl and metadata.version are optional."
+          }
+        },
+        {
+          "name": "List Pending Source Changes",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ingestion/pending-changes",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "ingestion", "pending-changes"]
+            },
+            "description": "Documents whose live source content has been detected as CHANGED by the scheduled SourceChangeMonitor job and is awaiting manual re-ingestion review."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Applicant Profile",
+      "item": [
+        {
+          "name": "Set Field - Full Name",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fieldPath\": \"personalInfo.fullName\",\n  \"value\": \"Jane Doe\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/applicants/{{applicantId}}/profile/fields",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "applicants", "{{applicantId}}", "profile", "fields"]
+            },
+            "description": "A field set this way is self-declared and starts already USER_CONFIRMED. fieldPath must be one of ApplicantProfile's PATH_* constants (see docs/api.md for the full list); value is a plain string/number, or a nested address object for addressInfo.permanentAddress / addressInfo.currentAddress."
+          }
+        },
+        {
+          "name": "Set Field - Permanent Address",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fieldPath\": \"addressInfo.permanentAddress\",\n  \"value\": {\n    \"line1\": \"House 12, Road 5\",\n    \"line2\": \"Dhanmondi\",\n    \"city\": \"Dhaka\",\n    \"postalCode\": \"1205\",\n    \"countryIso\": \"BD\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/applicants/{{applicantId}}/profile/fields",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "applicants", "{{applicantId}}", "profile", "fields"]
+            },
+            "description": "Example of the nested address-object shape required for addressInfo.permanentAddress / addressInfo.currentAddress."
+          }
+        },
+        {
+          "name": "Get Profile",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/applicants/{{applicantId}}/profile",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "applicants", "{{applicantId}}", "profile"]
+            },
+            "description": "Returns every field set so far for this applicantId, grouped into personalInfo/passportInfo/nationalityInfo/addressInfo/familyInfo/employmentInfo/travelInfo. applicantId is an opaque, unauthenticated UUID in Phase B - any UUID works, nothing needs to be created first."
+          }
+        },
+        {
+          "name": "Verify Field - Confirm",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fieldPath\": \"personalInfo.fullName\",\n  \"action\": \"CONFIRM\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/applicants/{{applicantId}}/profile/fields/verify",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "applicants", "{{applicantId}}", "profile", "fields", "verify"]
+            },
+            "description": "action is CONFIRM, CORRECT, or REJECT. CORRECT requires correctedValue in the body (same shape as SetField's value); CONFIRM/REJECT ignore it."
+          }
+        },
+        {
+          "name": "Verify Field - Correct",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fieldPath\": \"personalInfo.fullName\",\n  \"action\": \"CORRECT\",\n  \"correctedValue\": \"Jane A. Doe\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/applicants/{{applicantId}}/profile/fields/verify",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "applicants", "{{applicantId}}", "profile", "fields", "verify"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Applicant Document (Phase C)",
+      "item": [
+        {
+          "name": "Upload Passport (production)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": [],
+                  "description": "A real passport bio-data page image (JPEG/PNG), cropped to just that page. Under 15MB."
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/applicants/{{applicantId}}/documents/passport",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "applicants", "{{applicantId}}", "documents", "passport"]
+            },
+            "description": "The real upload-to-candidates flow: stores the image, runs the pre-OCR quality gate, then reads fields from MRZ (Tesseract OCR, checksum-validated) and vision (llava:7b under ollama / gpt-4o-mini under openai), cross-validating where both sources supply a field. Requires TESSDATA_PATH env var pointing at a real tessdata directory (see application.properties). Response mirrors DocumentExtractionResult: status is QUALITY_REJECTED (image too degraded, or no MRZ found - message explains why) or EXTRACTED (fieldCandidates keyed by ApplicantProfile.PATH_* constants, or path + '.conflict.mrz' / '.conflict.visual' where MRZ and vision disagreed - see docs/api.md)."
+          }
+        },
+        {
+          "name": "Vision Preview (diagnostic - real image)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": [],
+                  "description": "A real passport bio-data page image (JPEG/PNG). Under 15MB (spring.servlet.multipart.max-file-size)."
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/applicants/{{applicantId}}/documents/passport/vision-preview",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "applicants", "{{applicantId}}", "documents", "passport", "vision-preview"]
+            },
+            "description": "DIAGNOSTIC ONLY - not the production upload flow. Calls VisionExtractionPort directly (llava:7b under the ollama profile, gpt-4o-mini under openai), bypassing the image-quality gate, OCR, MRZ parsing, and persistence entirely - nothing here is stored or associated with applicantId. The real upload flow (DocumentIntelligenceService) has no controller yet and needs Tesseract OCR configured first. Click the file field's value and choose a real image before sending. Response mirrors VisualPassportData: passportNumber/dateOfBirth/expiryDate/issueDate/placeOfBirth/passportType, each { value, present, clearlyReadable }. Per-field accuracy varies between runs - see PROGRESS.md's 2026-09-02 entry."
+          }
+        }
+      ]
+    }
+  ]
+}
