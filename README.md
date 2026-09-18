@@ -6,7 +6,7 @@ This is not a "chat with PDF" demo. It follows Clean Architecture, is backed by 
 
 First supported route: **passport Bangladesh → destination India.**
 
-**Status:** Phase 1 MVP complete — all 7 planned sprints shipped (ingestion, hybrid retrieval RAG pipeline, error handling/tests/docs, source-change monitoring & version supersession). Phase 2 (Visa Application Assistant) is underway — Phase B (Applicant Profile) and the core of Phase C (Passport Document Intelligence — MRZ + vision extraction, cross-field validation) are done; no REST API for Phase C yet. See [`docs/VISA_APPLICATION_ASSISTANT_PROPOSAL.md`](docs/VISA_APPLICATION_ASSISTANT_PROPOSAL.md) for the full roadmap. See [`SPRINTS.md`](SPRINTS.md) / [`PROGRESS.md`](PROGRESS.md) for the full task-level history.
+**Status:** Phase 1 MVP complete — all 7 planned sprints shipped (ingestion, hybrid retrieval RAG pipeline, error handling/tests/docs, source-change monitoring & version supersession). The Visa Application Assistant is also underway on top of it — Phase B (Applicant Profile), Phase C (Passport Document Intelligence — MRZ + vision extraction, cross-field validation, full upload/confirm REST API), and Phase D (visa `Application`s — document checklist, profile consistency check) are all done. See [`docs/VISA_APPLICATION_ASSISTANT_PROPOSAL.md`](docs/VISA_APPLICATION_ASSISTANT_PROPOSAL.md) for the full roadmap. See [`SPRINTS.md`](SPRINTS.md) / [`PROGRESS.md`](PROGRESS.md) for the full task-level history.
 
 ---
 
@@ -136,11 +136,11 @@ curl http://localhost:8081/api/v1/applicants/$APPLICANT_ID/profile
 
 Every field set this way is self-declared and starts already-confirmed. Full field list, the address-object shape, and the confirm/correct/reject verification endpoint are documented in [`docs/api.md`](docs/api.md).
 
-### 7. Passport document intelligence (production flow has no REST endpoint yet)
+### 7. Passport document intelligence
 
-The pipeline that turns an uploaded passport image into reviewable `ApplicantProfile` field candidates — image quality gate, MRZ OCR + checksum validation, vision-model extraction of fields the MRZ doesn't carry (issue date, place of birth, passport type), cross-checking the fields both sources supply, and never auto-trusting anything until the applicant confirms it — is implemented (`application/document/DocumentIntelligenceService`, `ExtractedFieldConfirmationService`) but **has no controller wired up yet**, and needs Tesseract OCR configured on the host before it can (it runs MRZ extraction before vision and rejects the upload if that fails). See [`PROGRESS.md`](PROGRESS.md#phase-c--passport-document-intelligence-core-done-2026-09-01) for what exists and [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the flow.
+The pipeline that turns an uploaded passport image into reviewable `ApplicantProfile` field candidates — image quality gate, MRZ OCR + checksum validation, vision-model extraction of fields the MRZ doesn't carry (issue date, place of birth, passport type), cross-checking the fields both sources supply, and never auto-trusting anything until the applicant confirms it (`application/document/DocumentIntelligenceService`, `ExtractedFieldConfirmationService`) — has a full REST API: `POST /api/v1/applicants/{applicantId}/documents/passport` to upload, `POST .../documents/{documentId}/confirm` to accept candidates into the profile. Needs Tesseract OCR configured on the host (it runs MRZ extraction before vision and rejects the upload if that fails). See [`docs/api.md`](docs/api.md#document-intelligence-phase-c) for request/response shapes and [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#54-document-intelligence-flow-phase-c) for the flow.
 
-Under the `ollama` profile, the vision-extraction step runs against `llava:7b` — verified live (not assumed), both through a JUnit test against a real local Ollama instance and over real HTTP through the running app (below): field accuracy varies between runs (5/6 correct one run; two fields swapped onto each other's keys another run) — a real, run-to-run OCR-accuracy limitation, not the "model never consumed the image at all" failure `gemma4:latest` had. See `PROGRESS.md`'s 2026-09-02 entry for full results and remaining limitations.
+Under the `ollama` profile, the vision-extraction step runs against `qwen2.5vl:7b` (not `llava:7b`, which was found to hallucinate confident-looking wrong passport numbers/dates — see `docs/ARCHITECTURE.md` §5.4). Field accuracy still varies between runs — a real OCR-accuracy limitation, not the "model never consumed the image at all" failure `gemma4:latest` had.
 
 **Vision preview (diagnostic endpoint, works today):** calls the vision-extraction step directly over HTTP, bypassing OCR/MRZ/persistence, so you can test it against a real image without Tesseract set up:
 
@@ -150,6 +150,21 @@ curl -X POST http://localhost:8081/api/v1/applicants/$(uuidgen)/documents/passpo
 ```
 
 Not the production upload flow — see `docs/api.md`'s Document Intelligence section for the response shape and caveats.
+
+### 8. Visa applications
+
+Once a profile has some fields, open an `Application` against a specific passport/destination/visa-type to get a document checklist and a profile consistency check:
+
+```bash
+APPLICATION_ID=$(curl -s -X POST http://localhost:8081/api/v1/applicants/$APPLICANT_ID/applications \
+  -H "Content-Type: application/json" \
+  -d '{ "passportIso": "BD", "destinationIso": "IN", "visaTypeCode": "TOURIST" }' | jq -r '.data.id')
+
+curl http://localhost:8081/api/v1/applicants/$APPLICANT_ID/applications/$APPLICATION_ID/checklist
+curl http://localhost:8081/api/v1/applicants/$APPLICANT_ID/applications/$APPLICATION_ID/consistency-check
+```
+
+The checklist reuses the same RAG pipeline `POST /api/v1/visa/query` uses — no separately maintained document-list data exists. The consistency check surfaces unresolved MRZ-vs-visual conflicts left by the document-intelligence pipeline (not yet a true cross-document check — see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#55-visa-application-flow-phase-d)). Full request/response shapes in [`docs/api.md`](docs/api.md#visa-application-phase-d).
 
 ---
 
@@ -217,6 +232,6 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for full package responsibili
 - [`docs/SPRINT5_SMOKE_TEST_REPORT.md`](docs/SPRINT5_SMOKE_TEST_REPORT.md) — the first live end-to-end run and what it caught
 - [`docs/SPRINT6_EXPLAINED.md`](docs/SPRINT6_EXPLAINED.md) — global exception handling, the test suite, and the docs written to close out Sprint 6
 - [`docs/SPRINT7_EXPLAINED.md`](docs/SPRINT7_EXPLAINED.md) — source-change monitoring and document version supersession, in narrative form
-- [`docs/VISA_APPLICATION_ASSISTANT_PROPOSAL.md`](docs/VISA_APPLICATION_ASSISTANT_PROPOSAL.md) — architecture proposal for Phase 2 (Applicant Profile → Document Intelligence → Form Preparation → Web Form Assistant), approved 2026-08-31; Phase B (Applicant Profile) and the core of Phase C (Passport Document Intelligence) are shipped, the rest is phase-gated
+- [`docs/VISA_APPLICATION_ASSISTANT_PROPOSAL.md`](docs/VISA_APPLICATION_ASSISTANT_PROPOSAL.md) — architecture proposal for the Visa Application Assistant (Applicant Profile → Document Intelligence → Application model → Form Preparation → Web Form Assistant), approved 2026-08-31; Phases B (Applicant Profile), C (Passport Document Intelligence), and D (Application model — checklist, consistency check) are shipped, Phase E (PDF form preparation) onward is phase-gated
 - [`PROGRESS.md`](PROGRESS.md#phase-c--passport-document-intelligence-core-done-2026-09-01) — Phase C (Passport Document Intelligence): MRZ + vision extraction, cross-field validation, confidence heuristics, the `gemma4:latest` vision-capability finding, and the `llava:7b` swap + live verification
 - [`CLAUDE.md`](CLAUDE.md) / [`DEVELOPMENT_RULES.md`](DEVELOPMENT_RULES.md) — project governance: architecture rules, coding principles, and process this codebase is built to

@@ -381,7 +381,7 @@ The passport-upload-to-candidates pipeline (`DocumentIntelligenceService`, `Extr
 - Every candidate starts `UNVERIFIED`, regardless of confidence — confidence values are documented as heuristic/provisional extraction-signal strength, never a calibrated probability, and never on their own promote a field to verified.
 - When MRZ and vision disagree on a field, neither is written under that field's normal path — both are exposed under `path + ".conflict.mrz"` / `path + ".conflict.visual"` instead, so a human resolves it rather than one source silently winning.
 - Confirmation behaves exactly like the existing verify endpoint above: `confidence` becomes `1.0` and `VerificationStatus` becomes `USER_CONFIRMED`.
-- Under the `ollama` profile, the vision-extraction step runs against `llava:7b` (the profile's current default, replacing `gemma4:latest`, which was verified not to work for this) — see `PROGRESS.md`'s Phase C section and `docs/ARCHITECTURE.md` §5.4 for the live verification of both findings.
+- Under the `ollama` profile, the vision-extraction step runs against `qwen2.5vl:7b` (the profile's current default — `gemma4:latest` was verified not to consume the image at all, and `llava:7b` consumed it but hallucinated wrong passport numbers/dates) — see `PROGRESS.md`'s Phase C section and `docs/ARCHITECTURE.md` §5.4 for the live verification of all three findings.
 
 ### POST /api/v1/applicants/{applicantId}/documents/passport
 
@@ -392,20 +392,33 @@ curl -X POST http://localhost:8081/api/v1/applicants/$(uuidgen)/documents/passpo
   -F "file=@/path/to/passport.jpg"
 ```
 
-Response — 200 OK:
+Response — 200 OK (extracted):
 
 ```json
 {
   "documentId": "b3f...",
   "status": "EXTRACTED",
   "message": null,
+  "issues": [],
   "fieldCandidates": {
     "passportInfo.passportNumber": { "value": "A1234567", "confidence": 0.95, "verificationStatus": "UNVERIFIED" }
   }
 }
 ```
 
-`status` is `"EXTRACTED"` (candidates present) or `"QUALITY_REJECTED"` (image too degraded to OCR reliably, or no MRZ could be located — `message` explains why, `fieldCandidates` is empty). A field key ending `.conflict.mrz` / `.conflict.visual` means the two sources disagreed on that field; resolve it before confirming.
+Response — 200 OK (quality-rejected):
+
+```json
+{
+  "documentId": "b3f...",
+  "status": "QUALITY_REJECTED",
+  "message": "Please upload a clear, flat, well-lit passport scan/photo.",
+  "issues": ["BLURRY", "POOR_LIGHTING"],
+  "fieldCandidates": {}
+}
+```
+
+`status` is `"EXTRACTED"` (candidates present, `issues` empty) or `"QUALITY_REJECTED"` (image too degraded to OCR reliably, or no MRZ could be located — `fieldCandidates` is empty). `message` is a one-sentence summary; `issues` carries the specific `ImageQualityIssue` reason code(s) so a client can show the applicant an actionable checklist instead of just the generic sentence — `BLURRY`, `SKEWED`, `POOR_LIGHTING`, `GLARE_OR_SHADOW`, or `MRZ_NOT_READABLE` (the last also covers the case where the image passes the pixel-level quality gate but Tesseract still can't parse a valid MRZ from it). A field key ending `.conflict.mrz` / `.conflict.visual` means the two sources disagreed on that field; resolve it before confirming.
 
 ### POST /api/v1/applicants/{applicantId}/documents/{documentId}/confirm
 
@@ -432,7 +445,7 @@ See [Error Responses](#error-responses).
 
 ### Vision Preview (diagnostic, Phase C)
 
-`POST /api/v1/applicants/{applicantId}/documents/passport/vision-preview` — multipart upload (`file` field, an image). **Not the production upload flow above.** Calls `VisionExtractionPort` directly — bypasses the image-quality gate, OCR, MRZ parsing, and persistence entirely — so it can be used to check what the configured vision model (`llava:7b` under `ollama`, `gpt-4o-mini` under `openai`) reads off a real image before Tesseract is set up. `applicantId` only keeps the URL shape consistent with the rest of this API; nothing is stored or associated with that applicant.
+`POST /api/v1/applicants/{applicantId}/documents/passport/vision-preview` — multipart upload (`file` field, an image). **Not the production upload flow above.** Calls `VisionExtractionPort` directly — bypasses the image-quality gate, OCR, MRZ parsing, and persistence entirely — so it can be used to check what the configured vision model (`qwen2.5vl:7b` under `ollama`, `gpt-4o-mini` under `openai`) reads off a real image before Tesseract is set up. `applicantId` only keeps the URL shape consistent with the rest of this API; nothing is stored or associated with that applicant.
 
 ```bash
 curl -X POST http://localhost:8081/api/v1/applicants/$(uuidgen)/documents/passport/vision-preview \
@@ -442,6 +455,98 @@ curl -X POST http://localhost:8081/api/v1/applicants/$(uuidgen)/documents/passpo
 Response shape mirrors `VisualPassportData` — six fields (`passportNumber`, `dateOfBirth`, `expiryDate`, `issueDate`, `placeOfBirth`, `passportType`), each `{ "value": string|null, "present": boolean, "clearlyReadable": boolean }`. Live-verified against a real local Ollama + `llava:7b` and a real HTTP multipart upload — see `PROGRESS.md`'s 2026-09-02 entry. Per-field accuracy varies between runs (observed: correct on one run, two fields shifted onto the wrong keys on another) — this is a diagnostic tool for inspecting raw model output, not a substitute for the confirmation step the real pipeline requires before any value is trusted.
 
 Full design: [`docs/ARCHITECTURE.md`](ARCHITECTURE.md#54-document-intelligence-flow-phase-c), [`PROGRESS.md`](../PROGRESS.md#phase-c--passport-document-intelligence-core-done-2026-09-01).
+
+---
+
+## Visa Application (Phase D)
+
+An `Application` is the passport/destination/visa-type scope an applicant works against — creating one, withdrawing it, getting a document checklist, and checking the applicant's profile for unresolved conflicts. `applicantId` is an opaque, unauthenticated identifier, same posture as the rest of this API.
+
+### POST /api/v1/applicants/{applicantId}/applications
+
+```bash
+curl -X POST http://localhost:8081/api/v1/applicants/$(uuidgen)/applications \
+  -H "Content-Type: application/json" \
+  -d '{"passportIso": "BD", "destinationIso": "IN", "visaTypeCode": "TOURIST"}'
+```
+
+Response — 200 OK:
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "c3f...",
+    "applicantId": "a1b...",
+    "passportIso": "BD",
+    "destinationIso": "IN",
+    "visaTypeCode": "TOURIST",
+    "status": "OPEN",
+    "createdAt": "2026-09-07T10:00:00Z"
+  },
+  "message": null,
+  "timestamp": "2026-09-07T10:00:00Z"
+}
+```
+
+### POST /api/v1/applicants/{applicantId}/applications/{applicationId}/withdraw
+
+No body. Transitions `OPEN` → `WITHDRAWN`. Returns the same `ApplicationResponse` shape as create, with `status: "WITHDRAWN"`.
+
+### GET /api/v1/applicants/{applicantId}/applications/{applicationId}/checklist
+
+Answers "what documents does this application need" by asking that exact question of the same RAG pipeline `POST /api/v1/visa/query` uses, scoped to the application's own `passportIso`/`destinationIso`/`visaTypeCode` — there is no separately maintained document-list data.
+
+Response — 200 OK:
+
+```json
+{
+  "success": true,
+  "data": {
+    "applicationId": "c3f...",
+    "checklistText": "You will need a valid passport, a passport-sized photograph, proof of accommodation...",
+    "citations": [
+      { "ref": "[1]", "source": "India Tourist Visa Checklist", "url": "https://...", "lastUpdated": "2024-11-01", "chunkId": "uuid" }
+    ],
+    "confidenceScore": 0.87
+  },
+  "message": null,
+  "timestamp": "2026-09-07T10:00:00Z"
+}
+```
+
+If the retrieved context's confidence falls below the configured threshold, `checklistText` is the fixed `"I couldn't find sufficient official information."` sentence, `citations` is empty, and `confidenceScore` reflects the real (low) score — `200`/`success: true`, same fallback posture as a normal low-confidence visa query, not an error.
+
+### GET /api/v1/applicants/{applicantId}/applications/{applicationId}/consistency-check
+
+Scans the applicant's profile for fields where `DocumentIntelligenceService`'s MRZ and vision extraction disagreed and the applicant never resolved the conflict (the `path + ".conflict.mrz"` / `".conflict.visual"` keys from the document-upload response, §"Document Intelligence" above). **This is not yet a true cross-document check** (e.g. passport vs. a future NID) — `DocumentType` only has `PASSPORT` today, so there is nothing else to cross-check against yet; see `docs/ARCHITECTURE.md` §5.5 for the full scope note.
+
+Response — 200 OK:
+
+```json
+{
+  "success": true,
+  "data": {
+    "applicantId": "a1b...",
+    "consistent": false,
+    "conflicts": [
+      { "fieldPath": "personalInfo.fullName", "mrzValue": "JANE DOE", "visualValue": "JANE DOEE" }
+    ]
+  },
+  "message": null,
+  "timestamp": "2026-09-07T10:00:00Z"
+}
+```
+
+`consistent` is `true` iff `conflicts` is empty.
+
+### Errors
+
+- `applicationId` doesn't exist, or belongs to a different `applicantId` → `404 Not Found` (both endpoints above that take an `applicationId`, plus withdraw).
+- Withdrawing an already-`WITHDRAWN` application → `400 Bad Request`.
+- No `ApplicantProfile` exists yet for the consistency-check endpoint → `404 Not Found`.
+
+See [Error Responses](#error-responses).
 
 ---
 
@@ -469,6 +574,7 @@ All exceptions are translated by a single `@RestControllerAdvice` (`GlobalExcept
 | Request body fails `@Valid` validation (e.g. blank `query`, missing `metadata`) | `400 Bad Request` | `null` | Joined field errors, e.g. `"query: must not be blank; passport: must not be blank"` |
 | A referenced `Document` id doesn't exist | `404 Not Found` | `null` | `"Document not found: <uuid>"` |
 | No `ApplicantProfile` exists for the requested `applicantId` | `404 Not Found` | `null` | `"Applicant profile not found for applicantId: <uuid>"` |
+| `applicationId` doesn't exist, or belongs to a different `applicantId` | `404 Not Found` | `null` | `"Application not found: <uuid>"` |
 | Malformed applicant-profile input — unknown `fieldPath`, a `value`/`correctedValue` that doesn't match the field's declared type, or verifying a field that was never set | `400 Bad Request` | `null` | The exception's own message |
 | Any other deliberate domain/application error (e.g. ingestion path escapes the knowledge-base root) | `400 Bad Request` | `null` | The exception's own message — safe to expose, since these are raised deliberately by application code, not leaked internals |
 | Anything unexpected — including unseeded country/visa-type reference data for the requested `destinationIso`/`visaTypeCode` | `500 Internal Server Error` | `null` | `"An unexpected error occurred. Please try again later."` — full details are logged server-side only, never returned to the client |

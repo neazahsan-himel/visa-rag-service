@@ -217,6 +217,9 @@ The applicant-profile use cases (Phase B) — approved as a new sub-package the 
 - `ApplicantProfileService` — finds or lazily creates an applicant's profile and sets one field, converting the submitted value into the field's declared type
 - `ApplicantProfileVerificationService` — applies a confirm/correct/reject decision to one field; the only place a field's `VerificationStatus` changes
 - `ApplicantFieldValueParser` — public (a second caller, `application/document/ExtractedFieldConfirmationService`, needed it outside `application/applicant`); the single field-path-to-Java-type mapping every caller shares, so it can't drift between them
+- `ApplicationService` — creates and withdraws an `Application` (Phase D). `withdraw`/`getOwned` enforce the same ownership-filter pattern as `ExtractedFieldConfirmationService` (`findById` filtered by `applicantId`, else `ApplicationNotFoundException`)
+- `ChecklistService` — answers "what documents does this application need" by delegating to `VisaQueryService` with a `MetadataFilter` built from the application's own passport/destination/visa-type — no separately maintained document-list data exists; the existing knowledge base already answers this. Catches `InsufficientContextException` itself and converts it into a `ChecklistResult` with the fixed fallback text, since `GlobalExceptionHandler`'s existing handler for that exception returns a `VisaQueryResponse`-shaped body, which doesn't match `ChecklistResponse`
+- `ConsistencyValidationService` — scans an applicant's profile field map for unresolved `CONFLICT_SUFFIX_MRZ`/`CONFLICT_SUFFIX_VISUAL` key pairs left by `DocumentIntelligenceService`. **Scope deviation from the original proposal** (confirmed via `AskUserQuestion`): the proposal's `docs/VISA_APPLICATION_ASSISTANT_PROPOSAL.md` describes this as a cross-*document*-type check (e.g. passport vs. NID), but `DocumentType` only has `PASSPORT` today — there is no second document type to compare against yet. Reusing the existing MRZ-vs-visual conflict posture is the one genuinely implementable form of "surface conflicts, don't silently resolve them" available right now
 
 #### `application/document`
 
@@ -235,6 +238,7 @@ Immutable input objects passed from `presentation` to `application`.
 - `VerifyApplicantFieldCommand` — applicant id, field path, action (`CONFIRM`/`CORRECT`/`REJECT`), optional corrected value
 - `UploadApplicantDocumentCommand` — applicant id, `DocumentType`, raw image bytes (defensively copied)
 - `ConfirmExtractedFieldsCommand` — applicant id, document id, accepted field values (only what the applicant chose to keep)
+- `CreateApplicationCommand` — applicant id, passport ISO, destination ISO, visa type code
 
 #### `application/result`
 
@@ -243,7 +247,10 @@ Immutable output objects returned from `application` to `presentation`.
 - `VisaQueryResult` — answer text, citations, confidence score, model ID, latency
 - `IngestionResult` — document ID, chunk count, status
 - `ApplicantProfileResult` — the 7 grouped `*Info` views plus id/applicantId/lastModifiedAt; static factory `from(ApplicantProfile)`
-- `DocumentExtractionResult` — one of `QUALITY_REJECTED` (fixed rejection message) or `EXTRACTED` (field candidates keyed by `ApplicantProfile.PATH_*`, except conflicted fields — see `path + ".conflict.mrz"`/`".conflict.visual"` above)
+- `DocumentExtractionResult` — one of `QUALITY_REJECTED` (a one-sentence `message` plus the specific `Set<ImageQualityIssue>` that caused it, so the client can render an actionable per-issue checklist rather than just the sentence) or `EXTRACTED` (field candidates keyed by `ApplicantProfile.PATH_*`, except conflicted fields — see `path + ".conflict.mrz"`/`".conflict.visual"` above)
+- `ApplicationResult` — mirrors `Application`; static factory `from(Application)`
+- `ChecklistResult` — application id, generated checklist text, citations, confidence score (same shape/guarantees as `VisaQueryResult`)
+- `ConsistencyCheckResult` — applicant id, `consistent` flag, list of `FieldConflict` (field path + the two disagreeing `ExtractedField` readings)
 
 #### `application/port`
 
@@ -284,6 +291,8 @@ Pure Java. Zero Spring, JPA, or infrastructure dependencies. No framework annota
 - `ImageQualityAssessment` / `ImageQualityIssue` — record / enum; pre-OCR quality-gate outcome and specific failure reasons (`BLURRY`, `SKEWED`, `POOR_LIGHTING`, `GLARE_OR_SHADOW`, `MRZ_NOT_READABLE`)
 - `MrzData` — record; TD3 machine-readable-zone fields plus per-field and composite ICAO 9303 check-digit validity; a failed checksum doesn't discard the value, it's still returned for the caller to weigh
 - `VisualPassportData` / `VisualFieldReading` — record / record; fields read off the visual (non-MRZ) passport page by the vision model, each carrying the model's self-reported per-field readability instead of a checksum
+- `Application` — entity (Phase D); the passport/destination/visa-type scope an applicant is working against, same shape as `MetadataFilter`. Lifecycle: `OPEN` → `WITHDRAWN` via `withdraw()`; no "completed" state yet — that belongs to form preparation (Phase E)
+- `ApplicationStatus` — enum; `OPEN`, `WITHDRAWN`
 
 #### `domain/repository`
 
@@ -294,6 +303,7 @@ Interface contracts implemented in `infrastructure/persistence`.
 - `SourceCheckLogRepository` — append-only source-check-result writes/reads
 - `ApplicantProfileRepository` — CRUD for `ApplicantProfile` aggregates; one profile per applicant
 - `ApplicantDocumentRepository` — CRUD for `ApplicantDocument` entities
+- `ApplicationRepository` — `save`/`findById` for `Application` entities
 
 #### `domain/service`
 
@@ -307,9 +317,9 @@ Implements domain repository interfaces and application port interfaces. May imp
 
 #### `infrastructure/persistence`
 
-- JPA `@Entity` classes (`DocumentJpaEntity`, `ChunkJpaEntity`, `QueryAuditJpaEntity`, `CountryJpaEntity`, `VisaTypeJpaEntity`, `SourceCheckLogJpaEntity`, `ApplicantProfileJpaEntity`, `ExtractedFieldJpaEntity`, `ApplicantDocumentJpaEntity`)
+- JPA `@Entity` classes (`DocumentJpaEntity`, `ChunkJpaEntity`, `QueryAuditJpaEntity`, `CountryJpaEntity`, `VisaTypeJpaEntity`, `SourceCheckLogJpaEntity`, `ApplicantProfileJpaEntity`, `ExtractedFieldJpaEntity`, `ApplicantDocumentJpaEntity`, `ApplicationJpaEntity`)
 - Spring Data `JpaRepository` interfaces
-- Adapter classes that implement the domain repositories by delegating to the Spring Data repositories, including `ApplicantProfileRepositoryAdapter` — persists `ApplicantProfile`'s field map as one `ExtractedFieldJpaEntity` row per field (relational, not JSON), replacing all rows on every save rather than diffing individual changes — and `ApplicantDocumentRepositoryAdapter`
+- Adapter classes that implement the domain repositories by delegating to the Spring Data repositories, including `ApplicantProfileRepositoryAdapter` — persists `ApplicantProfile`'s field map as one `ExtractedFieldJpaEntity` row per field (relational, not JSON), replacing all rows on every save rather than diffing individual changes — and `ApplicantDocumentRepositoryAdapter`/`ApplicationRepositoryAdapter`
 - Flyway migration SQL files live in `src/main/resources/db/migration/`
 
 #### `infrastructure/vectorstore`
@@ -488,7 +498,51 @@ ApplicantProfileResult.from(profile) → Caller
 
 **Vision-model requirement:** step 5 needs a genuinely multimodal chat model behind the app's single `ChatModel` bean. Under the default `openai` profile that's `gpt-4o-mini` (vision-capable). Under the `ollama` profile, this was initially configured as `gemma4:latest`, which does **not** work for this — verified live (not assumed): its own Ollama capability metadata claims `vision` and it carries real vision-tower GGUF tensors, but three independent live tests (through `VisionPassportExtractionAdapter`, and raw `curl` against both `/api/generate` and `/api/chat` with a byte-verified-correct image payload) all showed it failing to actually consume the image — it either reports no image was given, or hallucinates the raw bytes as garbled text. This was root-caused to Ollama's handling of this specific model tag, not to Spring AI (`OllamaChatModel` is verified correct at the bytecode level — it does convert `UserMessage.getMedia()` into Ollama's native `images` field) or to the adapter (unchanged by this finding; it's written purely against `ChatModel`/`UserMessage`/`Media`, so it already works correctly with any genuinely multimodal model behind either provider).
 
-**Resolved (2026-09-02):** the `ollama` profile now configures `llava:7b` instead. Verified live end-to-end — through the real adapter against a real local Ollama instance, with a synthetic (not real) test passport image — `llava:7b` genuinely consumed the image and returned all 6 fields in the adapter's expected JSON shape, 5 of them matching the source image exactly (one digit dropped from the passport number, one date field misread — ordinary OCR-accuracy error, not the "never saw the image" failure mode `gemma4:latest` had). See `VisionPassportExtractionAdapterOllamaLiveIT` (opt-in, `-Dlive-ollama=true`) and `PROGRESS.md`'s 2026-09-02 entry for the full result and remaining limitations (not yet run against a real scanned passport photo, only the synthetic rendered one).
+**First resolved (2026-09-02):** the `ollama` profile was set to `llava:7b`. Verified live end-to-end — through the real adapter against a real local Ollama instance, with a synthetic (not real) test passport image — `llava:7b` genuinely consumed the image and returned all 6 fields in the adapter's expected JSON shape, 5 of them matching the source image exactly (one digit dropped from the passport number, one date field misread — ordinary OCR-accuracy error, not the "never saw the image" failure mode `gemma4:latest` had). See `VisionPassportExtractionAdapterOllamaLiveIT` (opt-in, `-Dlive-ollama=true`) and `PROGRESS.md`'s 2026-09-02 entry for that result.
+
+**Superseded (current default): `qwen2.5vl:7b`.** Further passport-extraction testing found `llava:7b` consumes the image but hallucinates confident-looking wrong values on fine-grained fields specifically — passport numbers and dates, exactly the fields that matter most for MRZ cross-validation — rather than the "digit dropped" ordinary OCR error the earlier note described. `qwen2.5vl:7b` is configured instead in `application-ollama.properties` for both RAG text queries and passport-image extraction (one model, one profile, no separate vision provider/config).
+
+### 5.5 Visa Application Flow (Phase D)
+
+The caller below is `ApplicationController` (`POST .../applications`, `POST .../applications/{applicationId}/withdraw`, `GET .../applications/{applicationId}/checklist`, `GET .../applications/{applicationId}/consistency-check` — see `docs/api.md`).
+
+```
+CreateApplicationCommand { applicantId, passportIso, destinationIso, visaTypeCode }
+  ▼
+ApplicationService.create(...)
+  │  new Application(..., status=OPEN) → ApplicationRepository.save(...)
+  ▼
+ApplicationResult → Caller
+
+GET .../checklist
+  ▼
+ChecklistService.getChecklist(applicantId, applicationId)
+  │  1. ApplicationService.getOwned(applicantId, applicationId) — 404 (ApplicationNotFoundException) if not owned
+  │  2. MetadataFilter(application.passportIso, destinationIso, visaTypeCode)
+  │  3. VisaQueryCommand("What documents are required for a {visaTypeCode} visa application?", filter)
+  │  4. VisaQueryService.answer(...) — the same RAG pipeline a normal visa query uses; no separate
+  │       document-list data exists or is needed
+  │       InsufficientContextException → caught here, converted to ChecklistResult with the fixed
+  │       fallback text (NOT left to propagate — GlobalExceptionHandler's existing handler for that
+  │       exception returns a VisaQueryResponse-shaped body, which doesn't match ChecklistResponse)
+  ▼
+ChecklistResult → Caller
+
+GET .../consistency-check
+  ▼
+ConsistencyValidationService.checkConsistency(applicantId, applicationId)
+  │  1. ApplicationRepository.findById(...) filtered by applicantId — 404 if not owned (ownership check
+  │       only; the scan below only needs applicantId, but the URL is nested under the application)
+  │  2. ApplicantProfileRepository.findByApplicantId(applicantId) — 404 (ApplicantProfileNotFoundException) if none
+  │  3. scan profile.getFields() for key pairs ending ApplicantProfile.CONFLICT_SUFFIX_MRZ /
+  │       CONFLICT_SUFFIX_VISUAL (left unresolved by DocumentIntelligenceService, §5.4 step 7)
+  ▼
+ConsistencyCheckResult{ consistent, conflicts: [FieldConflict{fieldPath, mrzReading, visualReading}, ...] } → Caller
+```
+
+**Scope deviation from `docs/VISA_APPLICATION_ASSISTANT_PROPOSAL.md`, confirmed via `AskUserQuestion`:** that proposal describes `ConsistencyValidationService` as a cross-*document*-type check (e.g. passport vs. NID). `DocumentType` only has `PASSPORT` today, so there is no second document type to compare against — the implementation above reuses the existing MRZ-vs-visual conflict posture from Phase C instead, which is the one genuinely implementable form of "surface conflicts, don't silently resolve them" available right now. A true cross-document check is deferred until a second `DocumentType` exists.
+
+**`ApplicationStatus` scope, confirmed via `AskUserQuestion`:** the proposal names `Application`/`ApplicationStatus` without enumerating values, and Phase D has no status-transition endpoint beyond `withdraw`. Rather than define an enum value with no caller, `withdraw()` and the `WITHDRAWN` state were added together so the enum has real behavior from the start.
 
 ---
 
@@ -609,9 +663,10 @@ V9__create_source_check_log.sql
 V10__create_applicant_profiles.sql
 V11__create_extracted_fields.sql
 V12__create_applicant_documents.sql
+V14__create_applications.sql
 ```
 
-**V13 (FK: `extracted_fields.source_document_id` → `applicant_documents.id`) is planned but not yet created** — deliberately gated until the Phase C implementation above and its tests were passing, per the plan that produced it. See `PROGRESS.md`'s Phase C section.
+**V13 (FK: `extracted_fields.source_document_id` → `applicant_documents.id`) is planned but not yet created** — deliberately gated until the Phase C implementation above and its tests were passing, per the plan that produced it. See `PROGRESS.md`'s Phase C section. **V14 (Phase D, `applications` table) was created before V13** since V13 is a separate, unrelated FK-hardening task — left as the next gap to close, not expanded into this session's Phase D scope.
 
 `spring.jpa.hibernate.ddl-auto` is set to `validate` in production — Hibernate validates the schema against JPA entities but never modifies it. Flyway is the sole schema authority.
 
@@ -727,6 +782,20 @@ CREATE TABLE applicant_documents (
 );
 
 CREATE INDEX idx_applicant_documents_applicant ON applicant_documents(applicant_id);
+
+-- V14__create_applications.sql
+CREATE TABLE applications (
+    id               UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    applicant_id     UUID         NOT NULL,
+    passport_iso     VARCHAR(2)   NOT NULL,
+    destination_iso  VARCHAR(2)   NOT NULL,
+    visa_type_code   VARCHAR(30)  NOT NULL,
+    created_at       TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    status           VARCHAR(20)  NOT NULL
+        CHECK (status IN ('OPEN', 'WITHDRAWN'))
+);
+
+CREATE INDEX idx_applications_applicant ON applications(applicant_id);
 ```
 
 `extracted_fields.source_document_id` has no foreign key yet — `applicant_documents` didn't exist when V11 was written; it does now, so the FK (V13) is planned but deliberately not yet created, see above. `ApplicantProfileRepositoryAdapter` replaces every `extracted_fields` row for a profile on each save rather than diffing changes, so `created_at` on that table reflects "last synced," not true original creation — an accepted limitation, since nothing in Phase B reads that column for anything load-bearing.
@@ -774,7 +843,7 @@ All payload fields are indexed. Filters on `passport_iso`, `destination_iso`, an
 - [x] Visa query REST endpoint with citations
 - [x] Confidence scoring and fallback response
 
-Phase 1 (Sprints 1–7) is complete as of 2026-08-19 — see `PROGRESS.md` for the sprint-by-sprint history. The Visa Application Assistant's Phase B (Applicant Profile, 2026-08-31) and Phase C (Passport Document Intelligence, 2026-09-01 — MRZ + vision extraction, cross-field validation, upload/confirm controller endpoints; `ollama` profile's vision model resolved to `llava:7b`, see §5.4) are also now complete, ahead of this section's own Phase 2/3, since both were scoped and approved separately — see `docs/VISA_APPLICATION_ASSISTANT_PROPOSAL.md`.
+Phase 1 (Sprints 1–7) is complete as of 2026-08-19 — see `PROGRESS.md` for the sprint-by-sprint history. The Visa Application Assistant's Phase B (Applicant Profile, 2026-08-31), Phase C (Passport Document Intelligence, 2026-09-01 — MRZ + vision extraction, cross-field validation, upload/confirm controller endpoints; `ollama` profile's vision model settled on `qwen2.5vl:7b` after `llava:7b` was found to hallucinate fine-grained fields, see §5.4), and Phase D (Visa Application model, 2026-09-07 — `Application`/`ApplicationStatus`, document checklist reusing the existing RAG pipeline, profile consistency check; see §5.5) are also now complete, ahead of this section's own Phase 2/3, since all three were scoped and approved separately — see `docs/VISA_APPLICATION_ASSISTANT_PROPOSAL.md`.
 
 ### Phase 2 — Multi-Country Support
 

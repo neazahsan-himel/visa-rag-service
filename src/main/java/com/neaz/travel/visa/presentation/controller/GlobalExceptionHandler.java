@@ -1,6 +1,7 @@
 package com.neaz.travel.visa.presentation.controller;
 
 import com.neaz.travel.visa.common.exception.ApplicantProfileNotFoundException;
+import com.neaz.travel.visa.common.exception.ApplicationNotFoundException;
 import com.neaz.travel.visa.common.exception.DocumentNotFoundException;
 import com.neaz.travel.visa.common.exception.InsufficientContextException;
 import com.neaz.travel.visa.common.exception.VisaRagException;
@@ -47,6 +48,11 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(ApplicantProfileNotFoundException.class)
     public ResponseEntity<ApiResponse<?>> handleApplicantProfileNotFound(ApplicantProfileNotFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.error(ex.getMessage()));
+    }
+
+    @ExceptionHandler(ApplicationNotFoundException.class)
+    public ResponseEntity<ApiResponse<?>> handleApplicationNotFound(ApplicationNotFoundException ex) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.error(ex.getMessage()));
     }
 
