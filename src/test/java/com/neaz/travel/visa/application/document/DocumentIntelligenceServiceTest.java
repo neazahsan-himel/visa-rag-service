@@ -348,13 +348,28 @@ class DocumentIntelligenceServiceTest {
     @Test
     void uploadAndExtract_poorImageQuality_rejectsBeforeInvokingOcrOrVision() {
         when(documentStoragePort.store(any(), any(), any())).thenReturn("storage/path");
-        when(imageQualityPort.assess(any())).thenReturn(ImageQualityAssessment.rejected(Set.of(ImageQualityIssue.BLURRY)));
+        when(imageQualityPort.assess(any())).thenReturn(
+                ImageQualityAssessment.rejected(Set.of(ImageQualityIssue.BLURRY, ImageQualityIssue.POOR_LIGHTING)));
 
         DocumentExtractionResult result = service.uploadAndExtract(command());
 
         assertEquals(DocumentProcessingStatus.QUALITY_REJECTED, result.status());
         assertTrue(result.fieldCandidates().isEmpty());
+        assertEquals(Set.of(ImageQualityIssue.BLURRY, ImageQualityIssue.POOR_LIGHTING), result.issues());
         verifyNoInteractions(ocrPort);
+        verifyNoInteractions(visionExtractionPort);
+    }
+
+    @Test
+    void uploadAndExtract_mrzNotParsedFromOcrText_rejectsWithMrzNotReadableIssue() {
+        when(documentStoragePort.store(any(), any(), any())).thenReturn("storage/path");
+        when(imageQualityPort.assess(any())).thenReturn(ImageQualityAssessment.accepted());
+        when(ocrPort.extractText(any())).thenReturn("no MRZ lines in this text at all");
+
+        DocumentExtractionResult result = service.uploadAndExtract(command());
+
+        assertEquals(DocumentProcessingStatus.QUALITY_REJECTED, result.status());
+        assertEquals(Set.of(ImageQualityIssue.MRZ_NOT_READABLE), result.issues());
         verifyNoInteractions(visionExtractionPort);
     }
 }

@@ -62,6 +62,18 @@ public final class ApplicantProfile {
      */
     public static final String PATH_PURPOSE_OF_VISIT = "travelInfo.purposeOfVisit";
 
+    /**
+     * Key suffix marking the MRZ side of a field where MRZ and visual
+     * extraction disagreed during document intelligence ({@code
+     * DocumentIntelligenceService}). Neither reading is written under the
+     * plain field path in that case; {@code ConsistencyValidationService}
+     * scans for these suffixes to surface unresolved conflicts.
+     */
+    public static final String CONFLICT_SUFFIX_MRZ = ".conflict.mrz";
+
+    /** Key suffix marking the visual side of a disagreeing field; see {@link #CONFLICT_SUFFIX_MRZ}. */
+    public static final String CONFLICT_SUFFIX_VISUAL = ".conflict.visual";
+
     private final UUID id;
     private final UUID applicantId;
     private final Instant createdAt;

@@ -11,6 +11,7 @@ import com.neaz.travel.visa.domain.model.ApplicantProfile;
 import com.neaz.travel.visa.domain.model.DocumentProcessingStatus;
 import com.neaz.travel.visa.domain.model.ExtractedField;
 import com.neaz.travel.visa.domain.model.ImageQualityAssessment;
+import com.neaz.travel.visa.domain.model.ImageQualityIssue;
 import com.neaz.travel.visa.domain.model.MrzData;
 import com.neaz.travel.visa.domain.model.VerificationStatus;
 import com.neaz.travel.visa.domain.model.VisualFieldReading;
@@ -29,6 +30,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -61,6 +63,10 @@ public class DocumentIntelligenceService {
 
     private static final String QUALITY_REJECTION_MESSAGE =
             "Please upload a clear, flat, well-lit passport scan/photo.";
+
+    private static final String MRZ_UNREADABLE_MESSAGE =
+            "We couldn't read the machine-readable zone (the two lines of text at the very bottom of the "
+                    + "photo page). Make sure it's fully visible, flat, and not covered by glare or shadow.";
 
     /**
      * MRZ check digit(s) relevant to this field matched. A strong MRZ
@@ -99,16 +105,6 @@ public class DocumentIntelligenceService {
      */
     private static final double VISUAL_LOW_CONFIDENCE = 0.40;
 
-    /**
-     * Key suffix marking the MRZ side of a field where MRZ and visual
-     * extraction disagree. Neither reading is written under the plain
-     * field path in that case — see {@link #mergeWithCrossValidation}.
-     */
-    private static final String CONFLICT_SUFFIX_MRZ = ".conflict.mrz";
-
-    /** Key suffix marking the visual side of a disagreeing field; see {@link #CONFLICT_SUFFIX_MRZ}. */
-    private static final String CONFLICT_SUFFIX_VISUAL = ".conflict.visual";
-
     private final ImageQualityPort imageQualityPort;
     private final OcrPort ocrPort;
     private final VisionExtractionPort visionExtractionPort;
@@ -139,14 +135,14 @@ public class DocumentIntelligenceService {
         ImageQualityAssessment assessment = imageQualityPort.assess(command.imageBytes());
         if (!assessment.acceptable()) {
             log.info("Document {} rejected by image-quality gate: {}", documentId, assessment.issues());
-            return rejectForQuality(document);
+            return rejectForQuality(document, QUALITY_REJECTION_MESSAGE, assessment.issues());
         }
 
         String ocrText = ocrPort.extractText(command.imageBytes());
         Optional<MrzData> mrzData = mrzParser.parse(ocrText);
         if (mrzData.isEmpty()) {
             log.info("Document {} passed image-quality gate but no MRZ could be parsed from OCR text", documentId);
-            return rejectForQuality(document);
+            return rejectForQuality(document, MRZ_UNREADABLE_MESSAGE, Set.of(ImageQualityIssue.MRZ_NOT_READABLE));
         }
 
         Map<String, ExtractedField<?>> mrzCandidates = buildMrzFieldCandidates(documentId, mrzData.get());
@@ -159,10 +155,10 @@ public class DocumentIntelligenceService {
         return DocumentExtractionResult.extracted(documentId, candidates);
     }
 
-    private DocumentExtractionResult rejectForQuality(ApplicantDocument document) {
+    private DocumentExtractionResult rejectForQuality(ApplicantDocument document, String message, Set<ImageQualityIssue> issues) {
         document.rejectForQuality();
         applicantDocumentRepository.save(document);
-        return DocumentExtractionResult.qualityRejected(document.getId(), QUALITY_REJECTION_MESSAGE);
+        return DocumentExtractionResult.qualityRejected(document.getId(), message, issues);
     }
 
     /**
@@ -264,9 +260,9 @@ public class DocumentIntelligenceService {
      * heuristic) and the visual reading is discarded as redundant. When they
      * disagree, neither is written under the plain path — this is the
      * "never silently choose one" rule from the target architecture — and
-     * both are exposed under {@link #CONFLICT_SUFFIX_MRZ}/{@link
-     * #CONFLICT_SUFFIX_VISUAL} keys instead, still {@code UNVERIFIED}, for
-     * the applicant to resolve.
+     * both are exposed under {@link ApplicantProfile#CONFLICT_SUFFIX_MRZ}/
+     * {@link ApplicantProfile#CONFLICT_SUFFIX_VISUAL} keys instead, still
+     * {@code UNVERIFIED}, for the applicant to resolve.
      */
     private Map<String, ExtractedField<?>> mergeWithCrossValidation(
             Map<String, ExtractedField<?>> mrzCandidates, Map<String, ExtractedField<?>> visualCandidates) {
@@ -280,8 +276,8 @@ public class DocumentIntelligenceService {
                 merged.put(path, visualField);
             } else if (!valuesAgree(mrzField.normalizedValue(), visualField.normalizedValue())) {
                 merged.remove(path);
-                merged.put(path + CONFLICT_SUFFIX_MRZ, mrzField);
-                merged.put(path + CONFLICT_SUFFIX_VISUAL, visualField);
+                merged.put(path + ApplicantProfile.CONFLICT_SUFFIX_MRZ, mrzField);
+                merged.put(path + ApplicantProfile.CONFLICT_SUFFIX_VISUAL, visualField);
             }
             // else: sources agree; the MRZ candidate already in `merged` stands.
         }
