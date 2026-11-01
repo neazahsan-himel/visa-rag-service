@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "description": "Golden question set for the answer-quality evaluation. Every expected fact is taken verbatim or near-verbatim from a file under knowledge-base/India/ — never from outside knowledge. Matching is case-insensitive substring: each entry in expectedFacts is a group of acceptable alternatives, and the group is satisfied if any alternative appears in the answer. forbiddenFacts lists phrases whose presence indicates a fabricated claim no source supports. expectedSources are document titles, matched against citations[].source.",
+  "description": "Golden question set for the answer-quality evaluation. Every expected fact is taken verbatim or near-verbatim from a file under knowledge-base/India/ — never from outside knowledge. Matching is case-insensitive substring: each entry in expectedFacts is a group of acceptable alternatives, and the group is satisfied if any alternative appears in the answer. forbiddenFacts lists phrases whose presence indicates a fabricated claim no source supports. expectedSources are document titles, matched against citations[].source. Case ids prefixed 'bn-' (Bengali) and 'mixed-' (romanised Bengali / Bengali-English mix) reuse only the phrasing style of real customer messages to a Bangladeshi travel agency; their expected facts still come solely from knowledge-base/India/, with Bengali alternatives (including Bengali digits) because the prompt does not fix the answer language. Figures that agency material states without an official source (e.g. minimum bank balances, 35x45 mm photos) appear only as forbiddenFacts.",
   "cases": [
     {
       "id": "tourist-passport-validity",
@@ -419,6 +419,182 @@
       "expectedSources": [],
       "expectedFacts": [],
       "forbiddenFacts": ["INR", "₹", "$"]
+    },
+    {
+      "id": "bn-tourist-documents",
+      "category": "ANSWERABLE",
+      "question": "ইন্ডিয়ান টুরিস্ট ভিসার জন্য কি কি ডকুমেন্ট লাগবে?",
+      "passportIso": "BD",
+      "destinationIso": "IN",
+      "visaTypeCode": "TOURIST",
+      "expectedSources": ["India Tourist Visa - Required Documents (HCI Dhaka)"],
+      "expectedFacts": [["passport", "পাসপোর্ট"], ["bank statement", "ব্যাংক স্টেটমেন্ট", "ব্যাংক বিবরণী"], ["electricity", "gas bill", "বিদ্যুৎ", "গ্যাস"]],
+      "forbiddenFacts": ["35mm x 45mm", "35 x 45", "৩৫"]
+    },
+    {
+      "id": "bn-fee-total",
+      "category": "GENERAL_FALLBACK",
+      "question": "ইন্ডিয়ান ভিসা করতে টোটাল খরচ কত? এক্সট্রা কোন টাকা লাগে?",
+      "passportIso": "BD",
+      "destinationIso": "IN",
+      "visaTypeCode": "TOURIST",
+      "expectedSources": ["India Visa - Fee Policy (All Visa Types)", "India Visa - Frequently Asked Questions (HCI Dhaka)"],
+      "expectedFacts": [["800", "৮০০"]],
+      "forbiddenFacts": ["INR", "₹", "rupees", "রুপি"]
+    },
+    {
+      "id": "bn-processing-time",
+      "category": "GENERAL_FALLBACK",
+      "question": "ইন্ডিয়ান টুরিস্ট ভিসা পেতে কতদিন সময় লাগে?",
+      "passportIso": "BD",
+      "destinationIso": "IN",
+      "visaTypeCode": "TOURIST",
+      "expectedSources": ["India Visa - Processing Time (All Visa Types)", "India Visa - Frequently Asked Questions (HCI Dhaka)"],
+      "expectedFacts": [["5-10", "5–10", "5 to 10", "five to ten", "৫-১০", "৫–১০"], ["three working days", "3 working days", "তিন কার্যদিবস", "৩ কার্যদিবস"]],
+      "forbiddenFacts": []
+    },
+    {
+      "id": "bn-submit-at-high-commission",
+      "category": "GENERAL_FALLBACK",
+      "question": "আমি কি সরাসরি ইন্ডিয়ান হাই কমিশনে গিয়ে ভিসার ফাইল জমা দিতে পারবো?",
+      "passportIso": "BD",
+      "destinationIso": "IN",
+      "visaTypeCode": "TOURIST",
+      "expectedSources": ["India Visa - Frequently Asked Questions (HCI Dhaka)"],
+      "expectedFacts": [["Indian Visa Application Centre", "Indian Visa Application Center", "IVAC", "ভিসা আবেদন কেন্দ্র"]],
+      "forbiddenFacts": []
+    },
+    {
+      "id": "bn-email-documents",
+      "category": "GENERAL_FALLBACK",
+      "question": "আমি ঢাকার বাইরে থাকি। ইন্ডিয়ান ভিসার ডকুমেন্টস কি ইমেইলে স্ক্যান করে পাঠাতে পারবো?",
+      "passportIso": "BD",
+      "destinationIso": "IN",
+      "visaTypeCode": "TOURIST",
+      "expectedSources": ["India Visa - Frequently Asked Questions (HCI Dhaka)"],
+      "expectedFacts": [["not accepted", "cannot", "not be accepted", "in person", "গ্রহণযোগ্য নয়", "নিজে উপস্থিত"]],
+      "forbiddenFacts": []
+    },
+    {
+      "id": "bn-medical-hospital-letter",
+      "category": "ANSWERABLE",
+      "question": "চিকিৎসার জন্য ইন্ডিয়া যাবো, হাসপাতালের কোন কাগজ লাগবে?",
+      "passportIso": "BD",
+      "destinationIso": "IN",
+      "visaTypeCode": "MEDICAL",
+      "expectedSources": ["India Medical Visa - Required Documents (HCI Dhaka)"],
+      "expectedFacts": [["appointment", "অ্যাপয়েন্টমেন্ট", "এপয়েন্টমেন্ট"]],
+      "forbiddenFacts": []
+    },
+    {
+      "id": "bn-refusal-fresh-passport-chance",
+      "category": "REFUSAL",
+      "question": "আমার পাসপোর্ট একদম নতুন, কোন দেশ ঘুরা নাই। ইন্ডিয়ান টুরিস্ট ভিসা পাওয়ার চান্স কেমন?",
+      "passportIso": "BD",
+      "destinationIso": "IN",
+      "visaTypeCode": "TOURIST",
+      "expectedSources": [],
+      "expectedFacts": [],
+      "forbiddenFacts": ["%"]
+    },
+    {
+      "id": "bn-refusal-uk-fee",
+      "category": "REFUSAL",
+      "question": "ইউকে টুরিস্ট ভিসার ফি কত?",
+      "passportIso": "BD",
+      "destinationIso": "GB",
+      "visaTypeCode": "TOURIST",
+      "expectedSources": [],
+      "expectedFacts": [],
+      "forbiddenFacts": ["£", "GBP"]
+    },
+    {
+      "id": "mixed-tourist-bank-statement",
+      "category": "ANSWERABLE",
+      "question": "Indian tourist visa er jonno koto mash er bank statement lagbe?",
+      "passportIso": "BD",
+      "destinationIso": "IN",
+      "visaTypeCode": "TOURIST",
+      "expectedSources": ["India Tourist Visa - Required Documents (HCI Dhaka)"],
+      "expectedFacts": [["six months", "6 months", "৬ মাস", "ছয় মাস"]],
+      "forbiddenFacts": ["12 months", "twelve months"]
+    },
+    {
+      "id": "mixed-tourist-minimum-balance",
+      "category": "ANSWERABLE",
+      "question": "Indian tourist visa er jonno bank e minimum koto taka balance dekhate hobe?",
+      "passportIso": "BD",
+      "destinationIso": "IN",
+      "visaTypeCode": "TOURIST",
+      "expectedSources": ["India Tourist Visa - Required Documents (HCI Dhaka)"],
+      "expectedFacts": [["sufficient", "পর্যাপ্ত"]],
+      "forbiddenFacts": ["1,30,000", "130,000", "130000", "lakh", "লাখ"]
+    },
+    {
+      "id": "mixed-passport-validity",
+      "category": "ANSWERABLE",
+      "question": "India tourist visa er jonno passport er meyad koto din thakte hobe?",
+      "passportIso": "BD",
+      "destinationIso": "IN",
+      "visaTypeCode": "TOURIST",
+      "expectedSources": ["India Tourist Visa - Required Documents (HCI Dhaka)"],
+      "expectedFacts": [["six months", "6 months", "৬ মাস", "ছয় মাস"]],
+      "forbiddenFacts": []
+    },
+    {
+      "id": "mixed-fee",
+      "category": "GENERAL_FALLBACK",
+      "question": "India visa fee koto taka?",
+      "passportIso": "BD",
+      "destinationIso": "IN",
+      "visaTypeCode": "TOURIST",
+      "expectedSources": ["India Visa - Fee Policy (All Visa Types)", "India Visa - Frequently Asked Questions (HCI Dhaka)"],
+      "expectedFacts": [["800", "৮০০"]],
+      "forbiddenFacts": ["INR", "₹", "rupees"]
+    },
+    {
+      "id": "mixed-business-trade-license",
+      "category": "ANSWERABLE",
+      "question": "Indian business visa te trade license lagbe naki?",
+      "passportIso": "BD",
+      "destinationIso": "IN",
+      "visaTypeCode": "BUSINESS",
+      "expectedSources": ["India Business Visa - Required Documents (HCI Dhaka)"],
+      "expectedFacts": [["trade license", "trade licence", "ট্রেড লাইসেন্স"]],
+      "forbiddenFacts": []
+    },
+    {
+      "id": "mixed-status-check",
+      "category": "GENERAL_FALLBACK",
+      "question": "Amar Indian visa er status check korbo kivabe?",
+      "passportIso": "BD",
+      "destinationIso": "IN",
+      "visaTypeCode": "TOURIST",
+      "expectedSources": ["India Visa - Frequently Asked Questions (HCI Dhaka)"],
+      "expectedFacts": [["visahelp.dhaka@mea.gov.in", "ivacbd.com"]],
+      "forbiddenFacts": []
+    },
+    {
+      "id": "mixed-refusal-canada-cost",
+      "category": "REFUSAL",
+      "question": "Canada visa er jonno total khoroch koto?",
+      "passportIso": "BD",
+      "destinationIso": "CA",
+      "visaTypeCode": "TOURIST",
+      "expectedSources": [],
+      "expectedFacts": [],
+      "forbiddenFacts": ["CAD", "185"]
+    },
+    {
+      "id": "mixed-refusal-singapore-evisa",
+      "category": "REFUSAL",
+      "question": "Singapore er visa ki e-visa naki sticker visa?",
+      "passportIso": "BD",
+      "destinationIso": "SG",
+      "visaTypeCode": "TOURIST",
+      "expectedSources": [],
+      "expectedFacts": [],
+      "forbiddenFacts": ["e-visa", "sticker"]
     }
   ]
 }

@@ -209,7 +209,7 @@ The `docs/SPRINT5_SMOKE_TEST_REPORT.md` describes the one manual, full-stack run
 
 ### Answer-quality evaluation
 
-The suite above proves the pipeline *works*; the evaluation measures whether its answers are *correct*. `AnswerQualityEvaluationTest` (`@Tag("evaluation")`) sends every question in `src/test/resources/evaluation/golden-set.json` — 38 cases written only from `knowledge-base/India/` — to a live service through the real `POST /api/v1/visa/query` endpoint, and scores each response with deterministic string heuristics (no LLM judge):
+The suite above proves the pipeline *works*; the evaluation measures whether its answers are *correct*. `AnswerQualityEvaluationTest` (`@Tag("evaluation")`) sends every question in `src/test/resources/evaluation/golden-set.json` — 54 cases written only from `knowledge-base/India/` — to a live service through the real `POST /api/v1/visa/query` endpoint, and scores each response with deterministic string heuristics (no LLM judge):
 
 | Metric | Measures |
 |---|---|
@@ -226,7 +226,9 @@ EVAL_BASE_URL=http://localhost:8081 ./mvnw test -Dtest=AnswerQualityEvaluationTe
 
 Each request times out after 120s by default; set `EVAL_REQUEST_TIMEOUT_SECONDS` higher for slow providers (a CPU-only Ollama `qwen2.5vl:7b` takes 1–2 minutes per question, so use `300`). A request that fails is recorded as an errored case and the run continues, rather than aborting and losing every other case's result.
 
-The report is written to `target/evaluation/report.md` (summary, per-category pass counts, a row for every failed case, and the reason for every errored case), then the run fails if any metric falls below the baseline defined in the test class. The scoring logic itself is unit-tested (`CaseScorerTest`, `EvaluationReportTest`) and runs in the normal suite.
+Real applicants rarely ask in tidy English, so the golden set also covers the way Bangladeshi travellers actually phrase visa questions: 38 English cases, 8 Bengali-script cases (ids prefixed `bn-`) and 8 romanised-Bengali / mixed cases (ids prefixed `mixed-`, e.g. *"India visa fee koto taka?"*). Only the phrasing style was taken from real customer messages; every expected fact still comes from the official sources in `knowledge-base/India/`, with Bengali alternatives (including Bengali digits such as `৮০০`) because the answer language is not fixed. They include refusal cases for destinations not yet in the knowledge base (UK, Canada, Singapore) and traps for common unofficial claims (e.g. a "minimum bank balance" figure no official source publishes), listed as forbidden phrases.
+
+The report is written to `target/evaluation/report.md` (summary, per-category pass counts, a per-language breakdown of every metric, a row for every failed case, and the reason for every errored case), then the run fails if any metric falls below the baseline defined in the test class. The scoring logic itself is unit-tested (`CaseScorerTest`, `EvaluationReportTest`) and runs in the normal suite.
 
 ---
 

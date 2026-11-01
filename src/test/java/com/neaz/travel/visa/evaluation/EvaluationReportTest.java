@@ -80,6 +80,65 @@ class EvaluationReportTest {
     }
 
     @Test
+    void languageFromCaseId_whenPrefixed_returnsMatchingLanguage() {
+        assertThat(EvaluationReport.Language.fromCaseId("bn-fee-total")).isEqualTo(EvaluationReport.Language.BENGALI);
+        assertThat(EvaluationReport.Language.fromCaseId("mixed-fee")).isEqualTo(EvaluationReport.Language.MIXED);
+    }
+
+    @Test
+    void languageFromCaseId_whenNoKnownPrefix_isEnglish() {
+        assertThat(EvaluationReport.Language.fromCaseId("tourist-photo")).isEqualTo(EvaluationReport.Language.ENGLISH);
+        // the prefix must include the hyphen, so an id that merely starts with "bn" is not Bengali
+        assertThat(EvaluationReport.Language.fromCaseId("bnext-case")).isEqualTo(EvaluationReport.Language.ENGLISH);
+    }
+
+    @Test
+    void scoresFor_returnsOnlyCasesInThatLanguage() {
+        EvaluationReport report = new EvaluationReport(List.of(
+                answer("tourist-a", 1, List.of(), List.of(), false, 0.9),
+                answer("bn-a", 1, List.of(), List.of(), false, 0.8),
+                refusal("bn-r", true, List.of(), 0.1)));
+
+        assertThat(report.scoresFor(EvaluationReport.Language.BENGALI))
+                .extracting(CaseScore::caseId)
+                .containsExactly("bn-a", "bn-r");
+        assertThat(report.scoresFor(EvaluationReport.Language.ENGLISH))
+                .extracting(CaseScore::caseId)
+                .containsExactly("tourist-a");
+        assertThat(report.scoresFor(EvaluationReport.Language.MIXED)).isEmpty();
+    }
+
+    @Test
+    void toMarkdown_byLanguage_computesMetricsPerLanguageAndShowsNaForEmptyDenominators() {
+        EvaluationReport report = new EvaluationReport(List.of(
+                // English: one passed answer case, one correctly refused refusal case
+                answer("tourist-a", 1, List.of(), List.of(), false, 0.9),
+                refusal("refusal-r", true, List.of(), 0.2),
+                // Bengali: one wrongly refused answer case missing one of two facts, one passed answer case
+                answer("bn-a", 0, List.of(List.of("x")), List.of(), true, 0.3),
+                answer("bn-b", 1, List.of(), List.of(), false, 0.8),
+                // Mixed: one hallucinating refusal case, one errored answer case
+                refusal("mixed-r", false, List.of("CAD"), 0.6),
+                errored("mixed-e", "Case mixed-e: request timed out")));
+
+        assertThat(report.toMarkdown())
+                .contains("## By Language")
+                .contains("| English | 2 | 100.0% | 100.0% | 100.0% | 100.0% | 0.0% | 0 | 0 |")
+                .contains("| Bengali | 2 | 50.0% | 50.0% | 75.0% | n/a | 50.0% | 0 | 0 |")
+                .contains("| Mixed (romanised Bengali) | 2 | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 1 | 1 |");
+    }
+
+    @Test
+    void toMarkdown_byLanguage_omitsLanguagesWithNoCases() {
+        EvaluationReport report = new EvaluationReport(List.of(answer("tourist-a", 1, List.of(), List.of(), false, 0.9)));
+
+        assertThat(report.toMarkdown())
+                .contains("| English | 1 |")
+                .doesNotContain("| Bengali |")
+                .doesNotContain("| Mixed (romanised Bengali) |");
+    }
+
+    @Test
     void constructor_whenScoresEmpty_throws() {
         assertThatThrownBy(() -> new EvaluationReport(List.of()))
                 .isInstanceOf(IllegalArgumentException.class);
