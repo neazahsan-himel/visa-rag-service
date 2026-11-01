@@ -18,6 +18,18 @@ public interface DocumentRepository {
 
     Document save(Document document);
 
+    /**
+     * Atomically persists a superseded document's deactivated state together
+     * with its replacement. At most one active document may exist per
+     * {@code documentKey}, so the deactivation must be stored before the
+     * replacement and both must succeed or fail together.
+     *
+     * @param superseded  the prior version, already deactivated by the caller
+     * @param replacement the new active version sharing the same document key
+     * @return the persisted replacement
+     */
+    Document replace(Document superseded, Document replacement);
+
     Optional<Document> findById(UUID id);
 
     Optional<Document> findByFileHash(String fileHash);
@@ -31,14 +43,15 @@ public interface DocumentRepository {
     List<Document> findAllActiveWithSourceUrl();
 
     /**
-     * Finds the currently active document for a given source URL, if any.
-     * Used by ingestion to detect and supersede a prior version when
-     * re-ingesting the same source with different content.
+     * Finds the currently active document for a given document key, if any.
+     * Used by ingestion to detect and supersede a prior version of the same
+     * logical document. Keyed by document identity rather than source URL,
+     * because one source can yield several distinct documents.
      *
-     * @param sourceUrl the official source URL to look up
-     * @return the active document for that source, if one exists
+     * @param documentKey the logical document's key
+     * @return the active document for that key, if one exists
      */
-    Optional<Document> findActiveBySourceUrl(String sourceUrl);
+    Optional<Document> findActiveByDocumentKey(String documentKey);
 
     /**
      * Performs a metadata-filtered full-text search over persisted chunks.

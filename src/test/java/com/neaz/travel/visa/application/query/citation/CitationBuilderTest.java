@@ -119,7 +119,8 @@ class CitationBuilderTest {
     }
 
     private Document document(String title, String sourceUrl) {
-        DocumentMetadata metadata = new DocumentMetadata("IN", "BD", "TOURIST", sourceUrl,
+        DocumentMetadata metadata = new DocumentMetadata(
+                "in/bd/tourist/" + UUID.randomUUID(), "IN", "BD", "TOURIST", sourceUrl,
                 LocalDate.of(2025, 1, 1), "v1");
         return new Document(UUID.randomUUID(), title, "hash-" + UUID.randomUUID(), metadata,
                 List.of(), Instant.now(), true);

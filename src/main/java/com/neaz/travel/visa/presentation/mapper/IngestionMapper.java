@@ -18,6 +18,7 @@ public class IngestionMapper {
 
     public IngestDocumentCommand toCommand(IngestionRequest request) {
         DocumentMetadata metadata = new DocumentMetadata(
+                request.metadata().documentKey(),
                 request.metadata().destinationIso(),
                 request.metadata().passportIso(),
                 request.metadata().visaTypeCode(),

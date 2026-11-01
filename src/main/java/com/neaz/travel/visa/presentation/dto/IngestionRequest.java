@@ -3,6 +3,8 @@ package com.neaz.travel.visa.presentation.dto;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 
 import java.time.LocalDate;
 
@@ -19,9 +21,16 @@ public record IngestionRequest(
         @NotNull @Valid MetadataDto metadata) {
 
     /**
-     * Wire shape of {@code DocumentMetadata}.
+     * Wire shape of {@code DocumentMetadata}. {@code documentKey} is
+     * lowercase segments of letters, digits and hyphens separated by
+     * {@code /} (e.g. {@code in/bd/tourist/required-documents}).
      */
     public record MetadataDto(
+            @NotBlank
+            @Size(max = 200)
+            @Pattern(regexp = "[a-z0-9]+(-[a-z0-9]+)*(/[a-z0-9]+(-[a-z0-9]+)*)*",
+                    message = "must be lowercase slash-separated segments of letters, digits and hyphens")
+            String documentKey,
             @NotBlank String destinationIso,
             @NotBlank String passportIso,
             @NotBlank String visaTypeCode,

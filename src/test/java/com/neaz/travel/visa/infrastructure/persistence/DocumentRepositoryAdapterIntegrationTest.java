@@ -8,11 +8,13 @@ import com.neaz.travel.visa.domain.model.MetadataFilter;
 import com.neaz.travel.visa.domain.model.ScoredChunk;
 import com.neaz.travel.visa.domain.model.VisaAnswer;
 import com.neaz.travel.visa.domain.model.VisaQuery;
+import jakarta.persistence.PersistenceException;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+import org.springframework.boot.test.autoconfigure.orm.jpa.TestEntityManager;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -27,6 +29,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase.Replace.NONE;
 
 /**
@@ -61,6 +64,9 @@ class DocumentRepositoryAdapterIntegrationTest {
 
     @Autowired
     private VisaQueryLogRepositoryAdapter visaQueryLogRepositoryAdapter;
+
+    @Autowired
+    private TestEntityManager entityManager;
 
     @Test
     void save_whenDocumentHasChunks_thenFindByIdReturnsChunksInOriginalOrder() {
@@ -125,9 +131,41 @@ class DocumentRepositoryAdapterIntegrationTest {
         visaQueryLogRepositoryAdapter.log(query, answer, List.of(UUID.randomUUID()), "gpt-4o-mini", 420L);
     }
 
+    @Test
+    void replace_whenSameDocumentKey_deactivatesSupersededAndLeavesReplacementActive() {
+        Document superseded = aDocumentWithTwoChunks("in/bd/tourist/guide");
+        documentRepositoryAdapter.save(superseded);
+        Document replacement = aDocumentWithTwoChunks("in/bd/tourist/guide");
+
+        superseded.deactivate();
+        documentRepositoryAdapter.replace(superseded, replacement);
+        entityManager.flush();
+
+        assertThat(documentRepositoryAdapter.findActiveByDocumentKey("in/bd/tourist/guide"))
+                .map(Document::getId)
+                .contains(replacement.getId());
+        assertThat(documentRepositoryAdapter.findById(superseded.getId()))
+                .map(Document::isActive)
+                .contains(false);
+    }
+
+    @Test
+    void save_whenAnotherActiveDocumentHasSameKey_isRejectedByTheDatabase() {
+        documentRepositoryAdapter.save(aDocumentWithTwoChunks("in/bd/tourist/guide"));
+        entityManager.flush();
+
+        documentRepositoryAdapter.save(aDocumentWithTwoChunks("in/bd/tourist/guide"));
+
+        assertThatThrownBy(entityManager::flush).isInstanceOf(PersistenceException.class);
+    }
+
     private Document aDocumentWithTwoChunks() {
+        return aDocumentWithTwoChunks("in/bd/tourist/guide");
+    }
+
+    private Document aDocumentWithTwoChunks(String documentKey) {
         UUID documentId = UUID.randomUUID();
-        DocumentMetadata metadata = new DocumentMetadata("IN", "BD", "TOURIST",
+        DocumentMetadata metadata = new DocumentMetadata(documentKey, "IN", "BD", "TOURIST",
                 "https://indianvisaonline.gov.in", LocalDate.of(2026, 1, 1), "v1");
         Chunk chunk0 = new Chunk(UUID.randomUUID(), documentId, 0,
                 "The tourist visa fee for Bangladeshi passport holders is 800 BDT.", 12, UUID.randomUUID());

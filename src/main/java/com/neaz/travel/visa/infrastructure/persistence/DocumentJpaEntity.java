@@ -25,6 +25,9 @@ public class DocumentJpaEntity {
     @Column(name = "id")
     private UUID id;
 
+    @Column(name = "document_key", nullable = false, length = 200)
+    private String documentKey;
+
     @Column(name = "country_id", nullable = false)
     private Long countryId;
 
@@ -59,10 +62,11 @@ public class DocumentJpaEntity {
         // required by JPA
     }
 
-    public DocumentJpaEntity(UUID id, Long countryId, Long visaTypeId, String passportIso, String title,
-                              String sourceUrl, String fileHash, LocalDate lastUpdated, String version,
-                              Instant ingestedAt, boolean active) {
+    public DocumentJpaEntity(UUID id, String documentKey, Long countryId, Long visaTypeId, String passportIso,
+                              String title, String sourceUrl, String fileHash, LocalDate lastUpdated,
+                              String version, Instant ingestedAt, boolean active) {
         this.id = id;
+        this.documentKey = documentKey;
         this.countryId = countryId;
         this.visaTypeId = visaTypeId;
         this.passportIso = passportIso;
@@ -77,6 +81,10 @@ public class DocumentJpaEntity {
 
     public UUID getId() {
         return id;
+    }
+
+    public String getDocumentKey() {
+        return documentKey;
     }
 
     public Long getCountryId() {

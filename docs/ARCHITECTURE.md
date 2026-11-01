@@ -201,7 +201,7 @@ The visa query use case and all components that serve it.
 
 The document ingestion use case.
 
-- `DocumentIngestionService` — receives an `IngestDocumentCommand` and delegates to infrastructure for parsing, chunking, embedding, and persistence; the service itself contains no parsing or I/O logic; also handles version supersession (deactivating a prior document when re-ingesting a changed source)
+- `DocumentIngestionService` — receives an `IngestDocumentCommand` and delegates to infrastructure for parsing, chunking, embedding, and persistence; the service itself contains no parsing or I/O logic; also handles version supersession (deactivating the prior active document with the same `documentKey` when re-ingesting changed content — keyed by document identity, not `sourceUrl`, because one official source can yield several documents)
 
 #### `application/monitoring`
 
@@ -704,6 +704,10 @@ CREATE TABLE documents (
     ingested_at     TIMESTAMPTZ  NOT NULL DEFAULT now(),
     active          BOOLEAN      NOT NULL DEFAULT true
 );
+
+-- V15__add_document_key.sql
+ALTER TABLE documents ADD COLUMN document_key VARCHAR(200) NOT NULL;  -- after backfilling existing rows
+CREATE UNIQUE INDEX idx_documents_active_key ON documents(document_key) WHERE active;
 
 -- V4__create_document_chunks.sql
 CREATE TABLE document_chunks (

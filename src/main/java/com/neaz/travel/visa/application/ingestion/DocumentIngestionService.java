@@ -55,10 +55,8 @@ public class DocumentIngestionService {
             return new IngestionResult(duplicate.getId(), duplicate.getChunks().size(), IngestionResult.Status.DUPLICATE);
         }
 
-        String sourceUrl = command.metadata().sourceUrl();
-        Optional<Document> previousVersion = sourceUrl == null
-                ? Optional.empty()
-                : documentRepository.findActiveBySourceUrl(sourceUrl);
+        Optional<Document> previousVersion =
+                documentRepository.findActiveByDocumentKey(command.metadata().documentKey());
 
         UUID documentId = UUID.randomUUID();
         List<Chunk> chunks = documentChunkingPort.chunk(text, documentId, command.metadata());
@@ -68,19 +66,21 @@ public class DocumentIngestionService {
 
         Document document = new Document(
                 documentId, command.title(), fileHash, command.metadata(), chunks, Instant.now(), true);
-        documentRepository.save(document);
+
+        // Retire the prior version of the same logical document in both stores
+        // so no query can retrieve superseded and current content at once.
+        // PostgreSQL swaps the two atomically; Qdrant is updated after the new
+        // points exist so the document is never unretrievable in between.
+        previousVersion.ifPresentOrElse(previous -> {
+            previous.deactivate();
+            documentRepository.replace(previous, document);
+        }, () -> documentRepository.save(document));
 
         for (int i = 0; i < chunks.size(); i++) {
             vectorSearchPort.upsert(chunks.get(i), vectors.get(i), command.metadata());
         }
 
-        // Retire the prior version in both stores so no query can retrieve
-        // superseded and current content for the same source at once.
-        previousVersion.ifPresent(previous -> {
-            previous.deactivate();
-            documentRepository.save(previous);
-            vectorSearchPort.deactivateDocument(previous.getId());
-        });
+        previousVersion.ifPresent(previous -> vectorSearchPort.deactivateDocument(previous.getId()));
 
         return new IngestionResult(documentId, chunks.size(), IngestionResult.Status.CREATED);
     }

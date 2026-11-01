@@ -85,6 +85,7 @@ curl -X POST http://localhost:8081/api/v1/ingestion/documents \
         "path": "India/Tourist/hci-dhaka-visa-documents.md",
         "title": "India Tourist Visa - Required Documents (HCI Dhaka)",
         "metadata": {
+          "documentKey": "in/bd/tourist/required-documents",
           "destinationIso": "IN",
           "passportIso": "BD",
           "visaTypeCode": "TOURIST",
@@ -93,7 +94,7 @@ curl -X POST http://localhost:8081/api/v1/ingestion/documents \
       }'
 ```
 
-`path` is resolved against `knowledge-base/` (see `knowledge-base.root`), which already contains curated content sourced from HCI Dhaka's official visa documents.
+`path` is resolved against `knowledge-base/` (see `knowledge-base.root`), which already contains curated content sourced from HCI Dhaka's official visa documents. Each document's sidecar `metadata.json` is a ready-made request body. `documentKey` identifies the logical document across versions: re-ingesting changed content under the same key supersedes the previous version.
 
 ### 4. Ask a question
 

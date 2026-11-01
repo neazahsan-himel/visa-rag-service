@@ -47,6 +47,7 @@ Ingests one document: parses it, splits it into chunks, embeds each chunk, persi
   "path": "India/Tourist/hci-dhaka-visa-documents.md",
   "title": "India Tourist Visa – Required Documents (HCI Dhaka)",
   "metadata": {
+    "documentKey": "in/bd/tourist/required-documents",
     "destinationIso": "IN",
     "passportIso": "BD",
     "visaTypeCode": "TOURIST",
@@ -61,10 +62,11 @@ Ingests one document: parses it, splits it into chunks, embeds each chunk, persi
 |---|---|---|---|
 | `path` | string | yes | Resolved against the `knowledge-base.root` config (default `knowledge-base/`). A path that would escape that root is rejected. |
 | `title` | string | yes | Human-readable document title; also `Citation.source` in query responses. |
+| `metadata.documentKey` | string | yes | Stable identity of the logical document across versions (e.g. `in/bd/tourist/required-documents`): lowercase segments of letters, digits and hyphens separated by `/`, max 200 characters. Ingesting new content under a key that already has an active document supersedes it — see [Source Change Monitoring](#source-change-monitoring). Deliberately independent of `sourceUrl`, since one official source can yield several documents (one HCI Dhaka PDF covers ten visa types). |
 | `metadata.destinationIso` | string | yes | ISO country code of the visa-issuing destination (e.g. `IN`). Must have seeded reference data (`countries`/`visa_types` tables). |
 | `metadata.passportIso` | string | yes | ISO country code of the applicant's passport (e.g. `BD`). |
 | `metadata.visaTypeCode` | string | yes | Visa type code (e.g. `TOURIST`, `BUSINESS`, or `GENERAL` for cross-cutting content — see [GENERAL fallback](#general-visa-type-fallback) below). Must exist for `destinationIso` in the seeded `visa_types` table. |
-| `metadata.sourceUrl` | string | no | Official source URL. |
+| `metadata.sourceUrl` | string | no | Official source URL. Used for citations and source-change monitoring; not for supersession. |
 | `metadata.lastUpdated` | date (`yyyy-MM-dd`) | yes | Last-updated date of the source document; feeds `ConfidenceScorer`'s recency factor. |
 | `metadata.version` | string | no | Free-form version label. |
 
@@ -559,7 +561,9 @@ The full workflow is human-in-the-loop by design (no auto re-ingestion, so nothi
 1. The monitor runs on schedule and flags changed sources.
 2. A curator checks `GET /api/v1/ingestion/pending-changes` for anything flagged `CHANGED`.
 3. The curator confirms the change is legitimate (not a scrape glitch or a session-driven portal artifact — see the caveat below) and re-ingests via `POST /api/v1/ingestion/documents`.
-4. `DocumentIngestionService` detects there is already an active document for that `sourceUrl` with different content, and deactivates the prior version in **both** PostgreSQL (`documents.active = false`) and Qdrant (payload-only update, `active = false` on every chunk of the old document) — so the old version stops being retrievable in either store, without needing to re-embed or delete anything.
+4. `DocumentIngestionService` detects there is already an active document with the same `documentKey` and different content, and deactivates the prior version in **both** PostgreSQL (`documents.active = false`, swapped atomically with the new version's insert) and Qdrant (payload-only update, `active = false` on every chunk of the old document, applied after the new chunks are upserted) — so the old version stops being retrievable in either store, without needing to re-embed or delete anything. A partial unique index (`idx_documents_active_key`) guarantees at most one active document per key at the database level.
+
+Supersession is keyed by `documentKey`, not `sourceUrl`: several documents can share one source URL (e.g. the ten per-visa-type checklists cut from one HCI Dhaka PDF) and stay active side by side.
 
 **Caveat:** `indianvisaonline.gov.in` and `indianvisa-bangladesh.nic.in` are session/form-driven portals that a plain HTTP fetch cannot meaningfully check — expect these to mostly report `FETCH_FAILED` ("not automatically checkable") rather than a reliable `CHANGED`/`UNCHANGED` signal. Monitoring is reliable for static sources such as PDFs.
 

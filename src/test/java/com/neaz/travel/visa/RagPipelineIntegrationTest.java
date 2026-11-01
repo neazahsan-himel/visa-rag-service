@@ -252,9 +252,29 @@ class RagPipelineIntegrationTest {
         assertThat(fallback.confidenceScore()).isEqualTo(exception.getConfidenceScore());
     }
 
+    @Test
+    void query_whenTwoDocumentsShareOneSourceUrl_bothRemainRetrievable() {
+        String sharedSourceUrl = "https://hci-dhaka.example/visa-checklist.pdf";
+        ingestionController.ingestDocument(
+                ingestionRequest(TOURIST_DOC_PATH, TOURIST_DOC_TITLE, "TOURIST", sharedSourceUrl));
+        ingestionController.ingestDocument(
+                ingestionRequest(GENERAL_DOC_PATH, GENERAL_DOC_TITLE, "GENERAL", sharedSourceUrl));
+
+        VisaQueryResponse answer = visaQueryController.query(
+                new VisaQueryRequest("tourist visa fee", "BD", "IN", "TOURIST")).data();
+
+        List<String> citedSources = answer.citations().stream().map(VisaQueryResponse.CitationDto::source).toList();
+        assertThat(citedSources).containsExactlyInAnyOrder(TOURIST_DOC_TITLE, GENERAL_DOC_TITLE);
+    }
+
     private IngestionRequest ingestionRequest(String path, String title, String visaTypeCode) {
+        return ingestionRequest(path, title, visaTypeCode, "https://hci-dhaka.example/" + path);
+    }
+
+    private IngestionRequest ingestionRequest(String path, String title, String visaTypeCode, String sourceUrl) {
         IngestionRequest.MetadataDto metadata = new IngestionRequest.MetadataDto(
-                "IN", "BD", visaTypeCode, "https://hci-dhaka.example/" + path, LocalDate.of(2026, 1, 1), "v1");
+                "in/bd/" + visaTypeCode.toLowerCase(Locale.ROOT), "IN", "BD", visaTypeCode, sourceUrl,
+                LocalDate.of(2026, 1, 1), "v1");
         return new IngestionRequest(path, title, metadata);
     }
 

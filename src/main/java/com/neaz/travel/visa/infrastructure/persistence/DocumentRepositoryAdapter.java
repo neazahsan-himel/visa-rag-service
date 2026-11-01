@@ -7,6 +7,7 @@ import com.neaz.travel.visa.domain.model.MetadataFilter;
 import com.neaz.travel.visa.domain.model.ScoredChunk;
 import com.neaz.travel.visa.domain.repository.DocumentRepository;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
@@ -40,23 +41,7 @@ public class DocumentRepositoryAdapter implements DocumentRepository {
 
     @Override
     public Document save(Document document) {
-        DocumentMetadata metadata = document.getMetadata();
-        Long countryId = resolveCountryId(metadata.destinationIso());
-        Long visaTypeId = resolveVisaTypeId(countryId, metadata.visaTypeCode());
-
-        DocumentJpaEntity entity = new DocumentJpaEntity(
-                document.getId(),
-                countryId,
-                visaTypeId,
-                metadata.passportIso(),
-                document.getTitle(),
-                metadata.sourceUrl(),
-                document.getFileHash(),
-                metadata.lastUpdated(),
-                metadata.version(),
-                document.getIngestedAt(),
-                document.isActive());
-        documentJpaRepository.save(entity);
+        documentJpaRepository.save(toEntity(document));
 
         List<ChunkJpaEntity> chunkEntities = document.getChunks().stream()
                 .map(chunk -> new ChunkJpaEntity(
@@ -70,6 +55,21 @@ public class DocumentRepositoryAdapter implements DocumentRepository {
         chunkJpaRepository.saveAll(chunkEntities);
 
         return document;
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>The deactivation is flushed explicitly before the replacement is
+     * saved: Hibernate otherwise orders inserts ahead of updates at flush
+     * time, which would briefly leave two active rows for the same key and
+     * violate {@code idx_documents_active_key}.
+     */
+    @Override
+    @Transactional
+    public Document replace(Document superseded, Document replacement) {
+        documentJpaRepository.saveAndFlush(toEntity(superseded));
+        return save(replacement);
     }
 
     @Override
@@ -90,8 +90,8 @@ public class DocumentRepositoryAdapter implements DocumentRepository {
     }
 
     @Override
-    public Optional<Document> findActiveBySourceUrl(String sourceUrl) {
-        return documentJpaRepository.findByActiveTrueAndSourceUrl(sourceUrl).map(this::toDomain);
+    public Optional<Document> findActiveByDocumentKey(String documentKey) {
+        return documentJpaRepository.findByActiveTrueAndDocumentKey(documentKey).map(this::toDomain);
     }
 
     @Override
@@ -107,10 +107,31 @@ public class DocumentRepositoryAdapter implements DocumentRepository {
                 .toList();
     }
 
+    private DocumentJpaEntity toEntity(Document document) {
+        DocumentMetadata metadata = document.getMetadata();
+        Long countryId = resolveCountryId(metadata.destinationIso());
+        Long visaTypeId = resolveVisaTypeId(countryId, metadata.visaTypeCode());
+
+        return new DocumentJpaEntity(
+                document.getId(),
+                metadata.documentKey(),
+                countryId,
+                visaTypeId,
+                metadata.passportIso(),
+                document.getTitle(),
+                metadata.sourceUrl(),
+                document.getFileHash(),
+                metadata.lastUpdated(),
+                metadata.version(),
+                document.getIngestedAt(),
+                document.isActive());
+    }
+
     private Document toDomain(DocumentJpaEntity entity) {
         String destinationIso = resolveDestinationIso(entity.getCountryId());
         String visaTypeCode = resolveVisaTypeCode(entity.getVisaTypeId());
         DocumentMetadata metadata = new DocumentMetadata(
+                entity.getDocumentKey(),
                 destinationIso,
                 entity.getPassportIso(),
                 visaTypeCode,
