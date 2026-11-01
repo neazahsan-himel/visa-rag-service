@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<title>Visa Assistant</title>
+<style>
+  :root {
+    --bg: #f1f5f9;
+    --surface: #ffffff;
+    --surface-alt: #f8fafc;
+    --border: #e2e8f0;
+    --text: #0f172a;
+    --muted: #64748b;
+    --accent: #2563eb;
+    --accent-fg: #ffffff;
+    --ok: #16a34a;
+    --warn: #d97706;
+    --err: #dc2626;
+    --radius: 14px;
+    --safe-b: env(safe-area-inset-bottom, 0px);
+    --safe-t: env(safe-area-inset-top, 0px);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0b1220;
+      --surface: #131c2e;
+      --surface-alt: #1b2740;
+      --border: #263449;
+      --text: #e6edf7;
+      --muted: #93a3ba;
+      --accent: #3b82f6;
+      --accent-fg: #ffffff;
+      --ok: #4ade80;
+      --warn: #fbbf24;
+      --err: #f87171;
+    }
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    display: flex;
+    flex-direction: column;
+    overscroll-behavior-y: contain;
+  }
+  .app {
+    max-width: 560px;
+    margin: 0 auto;
+    width: 100%;
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg);
+    position: relative;
+  }
+  header.topbar {
+    padding: calc(10px + var(--safe-t)) 16px 10px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    flex-shrink: 0;
+    z-index: 5;
+  }
+  header.topbar h1 { font-size: 17px; margin: 0; font-weight: 700; }
+  .applicant-chip {
+    font-size: 11px;
+    color: var(--muted);
+    background: var(--surface-alt);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 5px 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  .view { flex: 1; overflow-y: auto; display: none; -webkit-overflow-scrolling: touch; }
+  .view.active { display: flex; flex-direction: column; }
+
+  /* --- Chat view --- */
+  #chat-settings {
+    display: flex;
+    gap: 8px;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    flex-wrap: wrap;
+    align-items: center;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  #chat-settings .route {
+    background: var(--surface-alt);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 4px 8px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  select#visaType {
+    margin-left: auto;
+    background: var(--surface-alt);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 5px 8px;
+    font-size: 12px;
+  }
+  #messages { flex: 1; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+  .msg { max-width: 88%; padding: 10px 13px; border-radius: 16px; font-size: 14.5px; line-height: 1.45; white-space: pre-wrap; }
+  .msg.user { align-self: flex-end; background: var(--accent); color: var(--accent-fg); border-bottom-right-radius: 4px; }
+  .msg.bot { align-self: flex-start; background: var(--surface); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
+  .msg.system { align-self: center; background: transparent; color: var(--muted); font-size: 12.5px; text-align: center; max-width: 100%; }
+  .confidence { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; margin-top: 8px; padding: 2px 8px; border-radius: 999px; font-weight: 600; }
+  .confidence.high { background: color-mix(in srgb, var(--ok) 18%, transparent); color: var(--ok); }
+  .confidence.mid { background: color-mix(in srgb, var(--warn) 18%, transparent); color: var(--warn); }
+  .confidence.low { background: color-mix(in srgb, var(--err) 18%, transparent); color: var(--err); }
+  .citations { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; }
+  .citation {
+    font-size: 11px; text-decoration: none; color: var(--accent);
+    background: var(--surface-alt); border: 1px solid var(--border);
+    border-radius: 8px; padding: 3px 7px; display: inline-block; max-width: 220px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  #chat-input-bar {
+    display: flex; gap: 8px; padding: 10px 12px calc(10px + var(--safe-b));
+    border-top: 1px solid var(--border); background: var(--surface); flex-shrink: 0;
+  }
+  #chat-input-bar textarea {
+    flex: 1; resize: none; border: 1px solid var(--border); border-radius: 20px;
+    padding: 10px 14px; font-size: 15px; font-family: inherit; background: var(--surface-alt);
+    color: var(--text); max-height: 100px; line-height: 1.3;
+  }
+  #chat-input-bar textarea:focus { outline: none; border-color: var(--accent); }
+  .send-btn {
+    width: 42px; height: 42px; border-radius: 50%; border: none; background: var(--accent);
+    color: var(--accent-fg); font-size: 18px; flex-shrink: 0; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .send-btn:disabled { opacity: .5; }
+  .typing { display: inline-flex; gap: 3px; align-items: center; }
+  .typing span { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); animation: bounce 1.2s infinite; }
+  .typing span:nth-child(2) { animation-delay: .15s; }
+  .typing span:nth-child(3) { animation-delay: .3s; }
+  @keyframes bounce { 0%, 60%, 100% { opacity: .3; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-3px); } }
+
+  /* --- Passport view --- */
+  #passport-view { padding: 16px; gap: 14px; }
+  .card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 16px; margin-bottom: 14px;
+  }
+  .card h2 { font-size: 14px; margin: 0 0 12px; display: flex; align-items: center; justify-content: space-between; }
+  .card h2 .link-btn { font-size: 12px; font-weight: 500; color: var(--accent); background: none; border: none; cursor: pointer; }
+  .upload-zone {
+    border: 2px dashed var(--border); border-radius: 12px; padding: 24px 16px; text-align: center;
+    color: var(--muted); font-size: 13px; cursor: pointer; transition: border-color .15s;
+  }
+  .upload-zone.has-file { border-style: solid; border-color: var(--accent); padding: 12px; }
+  .upload-zone img { max-width: 100%; max-height: 160px; border-radius: 8px; display: block; margin: 0 auto 8px; }
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    background: var(--accent); color: var(--accent-fg); border: none; border-radius: 10px;
+    padding: 11px 16px; font-size: 14px; font-weight: 600; cursor: pointer; width: 100%; margin-top: 12px;
+  }
+  .btn:disabled { opacity: .5; }
+  .btn.secondary { background: var(--surface-alt); color: var(--text); border: 1px solid var(--border); }
+  .status-badge { font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px; text-transform: uppercase; letter-spacing: .03em; }
+  .status-badge.EXTRACTED { background: color-mix(in srgb, var(--ok) 18%, transparent); color: var(--ok); }
+  .status-badge.QUALITY_REJECTED { background: color-mix(in srgb, var(--err) 18%, transparent); color: var(--err); }
+  .field-row { padding: 12px 0; border-bottom: 1px solid var(--border); }
+  .field-row:last-child { border-bottom: none; }
+  .field-row-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .field-row-head label { font-size: 13px; font-weight: 600; flex: 1; }
+  .field-row input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent); flex-shrink: 0; }
+  .field-row input[type="text"], .field-row input[type="date"] {
+    width: 100%; padding: 9px 11px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--surface-alt); color: var(--text); font-size: 14px;
+  }
+  .conf-tag { font-size: 10px; color: var(--muted); font-weight: 500; }
+  .conflict-choice { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+  .conflict-opt { display: flex; align-items: flex-start; gap: 8px; font-size: 12.5px; background: var(--surface-alt); border: 1px solid var(--border); border-radius: 8px; padding: 8px; cursor: pointer; }
+  .conflict-opt input { margin-top: 2px; accent-color: var(--accent); }
+  .muted-note { font-size: 12px; color: var(--muted); margin: 4px 0 0; }
+  .issue-list { list-style: none; margin: 8px 0 4px; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+  .issue-item { display: flex; gap: 10px; align-items: flex-start; background: color-mix(in srgb, var(--err) 8%, var(--surface-alt)); border: 1px solid color-mix(in srgb, var(--err) 25%, var(--border)); border-radius: 10px; padding: 10px 12px; }
+  .issue-item .ic { font-size: 18px; line-height: 1; flex-shrink: 0; }
+  .issue-item .issue-title { font-size: 13px; font-weight: 700; color: var(--text); }
+  .issue-item .issue-tip { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .profile-group { margin-bottom: 14px; }
+  .profile-group h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 0 0 8px; }
+  .profile-field { display: flex; justify-content: space-between; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--border); font-size: 13.5px; }
+  .profile-field:last-child { border-bottom: none; }
+  .profile-field .k { color: var(--muted); }
+  .profile-field .v { text-align: right; font-weight: 500; }
+  .verif-tag { font-size: 9px; font-weight: 700; padding: 1px 6px; border-radius: 999px; margin-left: 6px; vertical-align: middle; }
+  .verif-tag.USER_CONFIRMED, .verif-tag.USER_CORRECTED { background: color-mix(in srgb, var(--ok) 20%, transparent); color: var(--ok); }
+  .verif-tag.UNVERIFIED { background: color-mix(in srgb, var(--warn) 20%, transparent); color: var(--warn); }
+  .verif-tag.REJECTED { background: color-mix(in srgb, var(--err) 20%, transparent); color: var(--err); }
+  .toast {
+    position: fixed; bottom: calc(70px + var(--safe-b)); left: 50%; transform: translateX(-50%);
+    background: var(--text); color: var(--bg); padding: 10px 18px; border-radius: 999px;
+    font-size: 13px; z-index: 50; opacity: 0; pointer-events: none; transition: opacity .2s, bottom .2s;
+    max-width: 90%; text-align: center;
+  }
+  .toast.show { opacity: 1; bottom: calc(84px + var(--safe-b)); }
+
+  nav.tabbar {
+    display: flex; border-top: 1px solid var(--border); background: var(--surface);
+    padding-bottom: var(--safe-b); flex-shrink: 0; z-index: 5;
+  }
+  nav.tabbar button {
+    flex: 1; border: none; background: none; padding: 9px 0 8px; display: flex; flex-direction: column;
+    align-items: center; gap: 2px; color: var(--muted); font-size: 11px; font-weight: 600; cursor: pointer;
+  }
+  nav.tabbar button .ic { font-size: 20px; line-height: 1; }
+  nav.tabbar button.active { color: var(--accent); }
+  .spinner {
+    width: 15px; height: 15px; border-radius: 50%; border: 2px solid rgba(255,255,255,.4);
+    border-top-color: #fff; animation: spin .7s linear infinite; display: inline-block;
+  }
+  .btn.secondary .spinner { border-color: rgba(0,0,0,.15); border-top-color: var(--text); }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <h1>🛂 Visa Assistant</h1>
+    <div class="applicant-chip" id="applicantChip" title="Tap to reset your applicant ID">id: …</div>
+  </header>
+
+  <section id="chat-view" class="view active">
+    <div id="chat-settings">
+      <span class="route">🇧🇩 BD → 🇮🇳 IN</span>
+      <select id="visaType" aria-label="Visa type">
+        <option value="">Any visa type</option>
+        <option value="TOURIST">Tourist</option>
+        <option value="BUSINESS">Business</option>
+        <option value="MEDICAL">Medical</option>
+        <option value="STUDENT">Student</option>
+      </select>
+    </div>
+    <div id="messages"></div>
+    <form id="chat-input-bar">
+      <textarea id="chatText" rows="1" placeholder="Ask about your India visa…" autocomplete="off"></textarea>
+      <button type="submit" class="send-btn" id="sendBtn" aria-label="Send">➤</button>
+    </form>
+  </section>
+
+  <section id="passport-view" class="view">
+    <div class="card">
+      <h2>Upload Passport</h2>
+      <label class="upload-zone" id="uploadZone" for="fileInput">
+        <div id="uploadZonePrompt">📷 Tap to take a photo or choose a passport image</div>
+      </label>
+      <input type="file" id="fileInput" accept="image/*" hidden>
+      <button class="btn" id="uploadBtn" disabled>Upload & Extract</button>
+    </div>
+
+    <div class="card" id="resultsCard" hidden>
+      <h2>
+        Extracted Fields
+        <span class="status-badge" id="statusBadge"></span>
+      </h2>
+      <p class="muted-note" id="resultMessage" hidden></p>
+      <div id="fieldRows"></div>
+      <button class="btn" id="confirmBtn" hidden>Save Selected to Profile</button>
+    </div>
+
+    <div class="card">
+      <h2>My Profile <button class="link-btn" id="refreshProfileBtn">Refresh</button></h2>
+      <div id="profileBody"><p class="muted-note">Loading…</p></div>
+    </div>
+  </section>
+
+  <nav class="tabbar">
+    <button class="tab-btn active" data-view="chat-view"><span class="ic">💬</span>Chat</button>
+    <button class="tab-btn" data-view="passport-view"><span class="ic">🛂</span>Passport</button>
+  </nav>
+  <div class="toast" id="toast"></div>
+</div>
+
+<script>
+const API_BASE = '';
+const LABELS = {
+  'personalInfo.fullName': 'Full Name', 'personalInfo.dateOfBirth': 'Date of Birth',
+  'personalInfo.gender': 'Gender', 'personalInfo.placeOfBirth': 'Place of Birth',
+  'passportInfo.passportNumber': 'Passport Number', 'passportInfo.issuingCountry': 'Issuing Country',
+  'passportInfo.issueDate': 'Issue Date', 'passportInfo.expiryDate': 'Expiry Date',
+  'passportInfo.passportType': 'Passport Type', 'nationalityInfo.nationality': 'Nationality',
+  'nationalityInfo.previousNationality': 'Previous Nationality',
+  'addressInfo.permanentAddress': 'Permanent Address', 'addressInfo.currentAddress': 'Current Address',
+  'familyInfo.fatherName': "Father's Name", 'familyInfo.motherName': "Mother's Name",
+  'familyInfo.spouseName': "Spouse's Name", 'familyInfo.maritalStatus': 'Marital Status',
+  'employmentInfo.occupation': 'Occupation', 'employmentInfo.employerName': 'Employer Name',
+  'employmentInfo.employerAddress': 'Employer Address', 'employmentInfo.monthlyIncome': 'Monthly Income',
+  'travelInfo.intendedArrivalDate': 'Intended Arrival', 'travelInfo.intendedDurationDays': 'Duration (days)',
+  'travelInfo.portOfEntry': 'Port of Entry', 'travelInfo.purposeOfVisit': 'Purpose of Visit',
+};
+const DATE_PATHS = new Set(['personalInfo.dateOfBirth', 'passportInfo.issueDate', 'passportInfo.expiryDate', 'travelInfo.intendedArrivalDate']);
+const QUALITY_ISSUE_TIPS = {
+  BLURRY: ['🔍', 'Image is blurry', 'Hold your phone steady, tap to focus on the page, and avoid moving while it captures.'],
+  SKEWED: ['📐', 'Passport looks tilted', 'Lay it flat on a surface and align it square within the frame, not at an angle.'],
+  POOR_LIGHTING: ['💡', 'Lighting is too dark or too bright', 'Use even, natural light. Avoid dim rooms and avoid direct flash.'],
+  GLARE_OR_SHADOW: ['✨', 'Glare or shadow is covering part of the page', 'Move away from direct light/reflections (windows, lamps, laminated-page glare) and avoid casting your own shadow on it.'],
+  MRZ_NOT_READABLE: ['🔤', "Can't read the machine-readable zone", 'Make sure the two lines of text at the very bottom of the photo page are fully visible, in focus, and not cropped out.'],
+};
+const label = p => LABELS[p] || p;
+
+function getApplicantId() {
+  let id = localStorage.getItem('applicantId');
+  if (!id) { id = crypto.randomUUID(); localStorage.setItem('applicantId', id); }
+  return id;
+}
+let applicantId = getApplicantId();
+
+async function api(path, options) {
+  const res = await fetch(API_BASE + path, options);
+  let body = null;
+  try { body = await res.json(); } catch (_) { /* no body */ }
+  if (!res.ok || !body || body.success === false) {
+    throw new Error((body && body.message) || `Request failed (${res.status})`);
+  }
+  return body.data;
+}
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toast._h);
+  toast._h = setTimeout(() => t.classList.remove('show'), 2600);
+}
+
+function renderApplicantChip() {
+  document.getElementById('applicantChip').textContent = 'id: ' + applicantId.slice(0, 8);
+}
+document.getElementById('applicantChip').addEventListener('click', () => {
+  if (!confirm('Reset your applicant ID? This starts a brand-new (empty) profile and forgets this one.')) return;
+  localStorage.removeItem('applicantId');
+  applicantId = getApplicantId();
+  renderApplicantChip();
+  loadProfile();
+  toast('Started a new applicant session');
+});
+
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById(btn.dataset.view).classList.add('active');
+    if (btn.dataset.view === 'passport-view') loadProfile();
+  });
+});
+
+/* ---------------- Chat ---------------- */
+const messagesEl = document.getElementById('messages');
+function appendMessage(role, contentEl) {
+  const div = document.createElement('div');
+  div.className = 'msg ' + role;
+  if (typeof contentEl === 'string') div.textContent = contentEl; else div.appendChild(contentEl);
+  messagesEl.appendChild(div);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+  return div;
+}
+appendMessage('system', 'Ask anything about a Bangladeshi passport holder applying for an India visa. Answers are grounded in official sources with citations.');
+
+document.getElementById('chatText').addEventListener('input', function () {
+  this.style.height = 'auto';
+  this.style.height = Math.min(this.scrollHeight, 100) + 'px';
+});
+
+document.getElementById('chat-input-bar').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const textarea = document.getElementById('chatText');
+  const query = textarea.value.trim();
+  if (!query) return;
+  const sendBtn = document.getElementById('sendBtn');
+  appendMessage('user', query);
+  textarea.value = '';
+  textarea.style.height = 'auto';
+  sendBtn.disabled = true;
+
+  const typingWrap = document.createElement('span');
+  typingWrap.className = 'typing';
+  typingWrap.innerHTML = '<span></span><span></span><span></span>';
+  const typingMsg = appendMessage('bot', typingWrap);
+
+  try {
+    const data = await api('/api/v1/visa/query', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        query, passport: 'BD', destination: 'IN',
+        visaType: document.getElementById('visaType').value || null,
+      }),
+    });
+    typingMsg.remove();
+    const wrap = document.createElement('div');
+    const answer = document.createElement('div');
+    answer.textContent = data.answer;
+    wrap.appendChild(answer);
+
+    const pct = Math.round((data.confidenceScore || 0) * 100);
+    const confSpan = document.createElement('div');
+    confSpan.className = 'confidence ' + (pct >= 70 ? 'high' : pct >= 40 ? 'mid' : 'low');
+    confSpan.textContent = `Confidence: ${pct}%`;
+    wrap.appendChild(confSpan);
+
+    if (data.citations && data.citations.length) {
+      const cwrap = document.createElement('div');
+      cwrap.className = 'citations';
+      data.citations.forEach(c => {
+        const a = document.createElement('a');
+        a.className = 'citation';
+        a.href = c.url || '#';
+        a.target = '_blank';
+        a.rel = 'noopener';
+        a.textContent = `[${c.ref}] ${c.source}`;
+        cwrap.appendChild(a);
+      });
+      wrap.appendChild(cwrap);
+    }
+    appendMessage('bot', wrap);
+  } catch (err) {
+    typingMsg.remove();
+    appendMessage('bot', '⚠️ ' + err.message);
+  } finally {
+    sendBtn.disabled = false;
+  }
+});
+
+/* ---------------- Passport upload ---------------- */
+const fileInput = document.getElementById('fileInput');
+const uploadZone = document.getElementById('uploadZone');
+const uploadBtn = document.getElementById('uploadBtn');
+let selectedFile = null;
+
+fileInput.addEventListener('change', () => {
+  selectedFile = fileInput.files[0] || null;
+  if (!selectedFile) return;
+  uploadZone.classList.add('has-file');
+  const url = URL.createObjectURL(selectedFile);
+  uploadZone.innerHTML = `<img src="${url}" alt="Selected passport"><div>${selectedFile.name}</div>`;
+  uploadBtn.disabled = false;
+});
+
+let lastDocumentId = null;
+
+function resetUploadZone() {
+  document.getElementById('resultsCard').hidden = true;
+  uploadZone.classList.remove('has-file');
+  uploadZone.innerHTML = '<div id="uploadZonePrompt">📷 Tap to take a photo or choose a passport image</div>';
+  uploadBtn.disabled = true;
+  selectedFile = null;
+  fileInput.value = '';
+}
+
+uploadBtn.addEventListener('click', async () => {
+  if (!selectedFile) return;
+  uploadBtn.disabled = true;
+  uploadBtn.innerHTML = '<span class="spinner"></span> Extracting…';
+  const fd = new FormData();
+  fd.append('file', selectedFile);
+  try {
+    const data = await api(`/api/v1/applicants/${applicantId}/documents/passport`, { method: 'POST', body: fd });
+    lastDocumentId = data.documentId;
+    renderExtractionResult(data);
+  } catch (err) {
+    toast('Upload failed: ' + err.message);
+  } finally {
+    uploadBtn.disabled = false;
+    uploadBtn.textContent = 'Upload & Extract';
+  }
+});
+
+function groupCandidates(candidates) {
+  const groups = {};
+  for (const [key, val] of Object.entries(candidates || {})) {
+    if (key.endsWith('.conflict.mrz')) {
+      const base = key.slice(0, -'.conflict.mrz'.length);
+      (groups[base] ??= {}).mrz = val;
+    } else if (key.endsWith('.conflict.visual')) {
+      const base = key.slice(0, -'.conflict.visual'.length);
+      (groups[base] ??= {}).visual = val;
+    } else {
+      (groups[key] ??= {}).plain = val;
+    }
+  }
+  return groups;
+}
+
+function renderExtractionResult(data) {
+  const card = document.getElementById('resultsCard');
+  const badge = document.getElementById('statusBadge');
+  const msgEl = document.getElementById('resultMessage');
+  const rowsEl = document.getElementById('fieldRows');
+  const confirmBtn = document.getElementById('confirmBtn');
+  card.hidden = false;
+  badge.textContent = data.status;
+  badge.className = 'status-badge ' + data.status;
+  rowsEl.innerHTML = '';
+
+  if (data.status !== 'EXTRACTED') {
+    msgEl.hidden = false;
+    msgEl.textContent = data.message || 'Document was not accepted. Try a clearer, flat, well-lit photo.';
+    confirmBtn.hidden = true;
+
+    const issues = data.issues || [];
+    if (issues.length) {
+      const list = document.createElement('ul');
+      list.className = 'issue-list';
+      issues.forEach(code => {
+        const [icon, title, tip] = QUALITY_ISSUE_TIPS[code] || ['⚠️', code, 'Try retaking the photo in better conditions.'];
+        const li = document.createElement('li');
+        li.className = 'issue-item';
+        li.innerHTML = `<span class="ic">${icon}</span><div><div class="issue-title">${title}</div><div class="issue-tip">${tip}</div></div>`;
+        list.appendChild(li);
+      });
+      rowsEl.appendChild(list);
+    }
+
+    const retryBtn = document.createElement('button');
+    retryBtn.className = 'btn secondary';
+    retryBtn.textContent = 'Try Another Photo';
+    retryBtn.addEventListener('click', resetUploadZone);
+    rowsEl.appendChild(retryBtn);
+    return;
+  }
+  msgEl.hidden = true;
+  confirmBtn.hidden = false;
+
+  const groups = groupCandidates(data.fieldCandidates);
+  Object.entries(groups).forEach(([path, g]) => {
+    const row = document.createElement('div');
+    row.className = 'field-row';
+    row.dataset.path = path;
+
+    const head = document.createElement('div');
+    head.className = 'field-row-head';
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    const lbl = document.createElement('label');
+    lbl.textContent = label(path);
+    head.append(checkbox, lbl);
+    row.appendChild(head);
+
+    if (g.plain) {
+      checkbox.checked = true;
+      const conf = document.createElement('span');
+      conf.className = 'conf-tag';
+      conf.textContent = Math.round(g.plain.confidence * 100) + '% confidence';
+      head.appendChild(conf);
+      row.appendChild(buildValueInput(path, g.plain.value));
+    } else {
+      const choiceWrap = document.createElement('div');
+      choiceWrap.className = 'conflict-choice';
+      const note = document.createElement('p');
+      note.className = 'muted-note';
+      note.style.marginBottom = '4px';
+      note.textContent = 'MRZ and the visual scan disagree — pick the correct value:';
+      row.appendChild(note);
+
+      ['mrz', 'visual'].forEach(src => {
+        if (!g[src]) return;
+        const optLabel = document.createElement('label');
+        optLabel.className = 'conflict-opt';
+        const radio = document.createElement('input');
+        radio.type = 'radio';
+        radio.name = 'conflict-' + path;
+        radio.addEventListener('change', () => {
+          checkbox.checked = true;
+          const input = row.querySelector('input[type="text"], input[type="date"]');
+          if (input) input.value = g[src].value;
+        });
+        optLabel.appendChild(radio);
+        const span = document.createElement('span');
+        span.textContent = `${src === 'mrz' ? 'MRZ' : 'Visual scan'}: ${g[src].value} (${Math.round(g[src].confidence * 100)}%)`;
+        optLabel.appendChild(span);
+        choiceWrap.appendChild(optLabel);
+      });
+      row.appendChild(choiceWrap);
+      row.appendChild(buildValueInput(path, ''));
+      checkbox.checked = false;
+    }
+    rowsEl.appendChild(row);
+  });
+}
+
+function buildValueInput(path, value) {
+  const input = document.createElement('input');
+  input.type = DATE_PATHS.has(path) ? 'date' : 'text';
+  input.value = value ?? '';
+  return input;
+}
+
+document.getElementById('confirmBtn').addEventListener('click', async () => {
+  if (!lastDocumentId) return;
+  const fields = {};
+  document.querySelectorAll('#fieldRows .field-row').forEach(row => {
+    const checkbox = row.querySelector('input[type="checkbox"]');
+    const input = row.querySelector('input[type="text"], input[type="date"]');
+    if (checkbox.checked && input && input.value.trim()) {
+      fields[row.dataset.path] = input.value.trim();
+    }
+  });
+  if (Object.keys(fields).length === 0) {
+    toast('Select at least one field to save');
+    return;
+  }
+  const btn = document.getElementById('confirmBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Saving…';
+  try {
+    await api(`/api/v1/applicants/${applicantId}/documents/${lastDocumentId}/confirm`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fields }),
+    });
+    toast('Saved to your profile');
+    resetUploadZone();
+    await loadProfile();
+  } catch (err) {
+    toast('Save failed: ' + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Save Selected to Profile';
+  }
+});
+
+/* ---------------- Profile ---------------- */
+const PROFILE_GROUPS = [
+  ['personalInfo', 'Personal', ['fullName', 'dateOfBirth', 'gender', 'placeOfBirth']],
+  ['passportInfo', 'Passport', ['passportNumber', 'issuingCountry', 'issueDate', 'expiryDate', 'passportType']],
+  ['nationalityInfo', 'Nationality', ['nationality', 'previousNationality']],
+  ['familyInfo', 'Family', ['fatherName', 'motherName', 'spouseName', 'maritalStatus']],
+  ['employmentInfo', 'Employment', ['occupation', 'employerName', 'employerAddress', 'monthlyIncome']],
+  ['travelInfo', 'Travel', ['purposeOfVisit', 'intendedArrivalDate', 'intendedDurationDays', 'portOfEntry']],
+];
+
+function formatValue(v) {
+  if (v == null) return null;
+  if (typeof v === 'object') {
+    return [v.line1, v.line2, v.city, v.postalCode, v.countryIso].filter(Boolean).join(', ') || null;
+  }
+  return String(v);
+}
+
+async function loadProfile() {
+  const body = document.getElementById('profileBody');
+  try {
+    const data = await api(`/api/v1/applicants/${applicantId}/profile`);
+    body.innerHTML = '';
+    let anySet = false;
+    PROFILE_GROUPS.forEach(([groupKey, groupLabel, fieldKeys]) => {
+      const groupData = data[groupKey] || {};
+      const rows = fieldKeys
+        .map(fk => {
+          const raw = groupData[fk];
+          const isPlainString = groupKey === 'travelInfo' && fk === 'purposeOfVisit';
+          const value = isPlainString ? formatValue(raw) : (raw ? formatValue(raw.normalizedValue) : null);
+          if (value == null) return null;
+          const path = `${groupKey}.${fk}`;
+          const verif = !isPlainString && raw ? raw.verificationStatus : null;
+          return `<div class="profile-field"><span class="k">${label(path)}</span><span class="v">${escapeHtml(value)}${verif ? `<span class="verif-tag ${verif}">${verif.replace('_', ' ')}</span>` : ''}</span></div>`;
+        })
+        .filter(Boolean);
+      if (rows.length) {
+        anySet = true;
+        const groupEl = document.createElement('div');
+        groupEl.className = 'profile-group';
+        groupEl.innerHTML = `<h3>${groupLabel}</h3>${rows.join('')}`;
+        body.appendChild(groupEl);
+      }
+    });
+    if (!anySet) body.innerHTML = '<p class="muted-note">No fields set yet — upload a passport or fill in details manually.</p>';
+  } catch (err) {
+    body.innerHTML = `<p class="muted-note">Could not load profile: ${escapeHtml(err.message)}</p>`;
+  }
+}
+document.getElementById('refreshProfileBtn').addEventListener('click', loadProfile);
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+renderApplicantChip();
+loadProfile();
+</script>
+</body>
+</html>

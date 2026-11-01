@@ -48,3 +48,18 @@ applicant-documents/
 # Tesseract OCR language data (runtime dependency, ~15MB binary — not source;
 # download eng.traineddata to the path configured via ocr.tesseract.data-path / TESSDATA_PATH)
 tessdata/
+
+# Local run artifacts — not source
+app.pid
+app_stdout.log
+app_stderr.log
+cp.txt
+
+# Ad-hoc manual-test screenshots/captures dropped at the repo root
+/*.png
+/*.PNG
+/*.jpg
+/*.jpeg
+
+# Local scratch data — not source
+/data from wtf/

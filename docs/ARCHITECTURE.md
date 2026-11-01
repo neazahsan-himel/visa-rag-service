@@ -859,8 +859,10 @@ Phase 1 (Sprints 1–7) is complete as of 2026-08-19 — see `PROGRESS.md` for t
 
 ### Phase 3 — Quality and Observability
 
-- [ ] Retrieval evaluation harness (precision@K, NDCG)
+- [x] Answer-quality evaluation harness — golden set + deterministic scoring (source hit rate, MRR, fact recall, forbidden-phrase hallucination check, refusal recall / false refusal rate), run against the live endpoint (see below)
 - [ ] Answer faithfulness evaluation using an LLM judge
+
+**Answer-quality evaluation (added 2026-10-29).** Lives entirely in the test source tree under `com.neaz.travel.visa.evaluation` — a development/CI quality tool, not production code, so it adds no production package and no Maven dependency. `GoldenSetLoader` reads `src/test/resources/evaluation/golden-set.json` into `GoldenCase` records (categories `ANSWERABLE`, `GENERAL_FALLBACK`, `REFUSAL`); `EvaluationApiClient` sends each question to `POST /api/v1/visa/query` on a running service (black-box, so controllers, mappers and the `GlobalExceptionHandler` low-confidence fallback are all exercised); `CaseScorer` produces a `CaseScore` per case using case-insensitive substring matching — an LLM judge was deliberately not used, keeping runs free and reproducible; `EvaluationReport` aggregates the scores and renders `target/evaluation/report.md`. `AnswerQualityEvaluationTest` (`@Tag("evaluation")`) is gated on the `EVAL_BASE_URL` environment variable; `EVAL_REQUEST_TIMEOUT_SECONDS` overrides the 120s per-request timeout, and a failed request is scored as an errored case (`CaseScorer.error`) instead of aborting the run. Retrieval is measured through `citations[]`, which are already in rerank order — pre-rerank retrieval quality (precision@K, NDCG over all fused chunks) is not measured, since the endpoint doesn't expose it.
 - [ ] Prometheus metrics + Grafana dashboard
 - [ ] Structured logging (JSON via Logstash encoder)
 - [ ] OpenTelemetry tracing across retrieval and generation

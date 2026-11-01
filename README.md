@@ -207,6 +207,27 @@ Everything else is a fast, in-process unit test (domain services, application or
 
 The `docs/SPRINT5_SMOKE_TEST_REPORT.md` describes the one manual, full-stack run this automated suite is built to replace going forward.
 
+### Answer-quality evaluation
+
+The suite above proves the pipeline *works*; the evaluation measures whether its answers are *correct*. `AnswerQualityEvaluationTest` (`@Tag("evaluation")`) sends every question in `src/test/resources/evaluation/golden-set.json` — 38 cases written only from `knowledge-base/India/` — to a live service through the real `POST /api/v1/visa/query` endpoint, and scores each response with deterministic string heuristics (no LLM judge):
+
+| Metric | Measures |
+|---|---|
+| Source hit rate / MRR | Whether, and how high, an expected document appears in `citations[]` |
+| Mean fact recall | Fraction of expected facts present in the answer |
+| Hallucinations | Answers containing a phrase no source supports (e.g. a fee in rupees) |
+| Refusal recall / false refusal rate | Refusing out-of-scope questions without refusing answerable ones |
+
+It needs the full stack running, the India knowledge base ingested, and a real LLM provider, so it only runs when `EVAL_BASE_URL` is set — a plain `mvn test` skips it:
+
+```bash
+EVAL_BASE_URL=http://localhost:8081 ./mvnw test -Dtest=AnswerQualityEvaluationTest
+```
+
+Each request times out after 120s by default; set `EVAL_REQUEST_TIMEOUT_SECONDS` higher for slow providers (a CPU-only Ollama `qwen2.5vl:7b` takes 1–2 minutes per question, so use `300`). A request that fails is recorded as an errored case and the run continues, rather than aborting and losing every other case's result.
+
+The report is written to `target/evaluation/report.md` (summary, per-category pass counts, a row for every failed case, and the reason for every errored case), then the run fails if any metric falls below the baseline defined in the test class. The scoring logic itself is unit-tested (`CaseScorerTest`, `EvaluationReportTest`) and runs in the normal suite.
+
 ---
 
 ## Project Structure
