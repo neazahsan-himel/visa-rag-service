@@ -1,13 +1,17 @@
 # India Entry Visa — Required Documents (Bangladeshi Passport Applicants)
 
-**Source:** High Commission of India, Dhaka — Official Visa Document Checklist
-**Source URL:** https://www.hcidhaka.gov.in/pdf/Documents_required_for_visa1.pdf
+**Source:** High Commission of India, Dhaka — Visa Documents: Category-wise
+**Source URL:** https://www.hcidhaka.gov.in/pdf/Visa_Category_Wise_Documents_Required_13082026.pdf
 **Country:** India (IN)
 **Passport:** Bangladesh (BD)
 **Visa type:** ENTRY
+**Official category name:** Miscellaneous Visa, sub-category X-1 — for spouse and children of an Indian citizen (earlier checklists called this the Entry Visa)
 **Document version:** Not specified on source
-**Source PDF created:** 2024-03-07 (per embedded PDF metadata)
-**Retrieved:** 2026-08-06
+**Source PDF created:** 2026-08-12 (per embedded PDF metadata)
+**Retrieved:** 2026-11-01
+**Supersedes:** the checklist in `Documents_required_for_visa1.pdf` (PDF created 2024-03-07)
+
+**Note:** artists / cultural personalities / academicians / professionals visiting India for performances are no longer listed under this category; the current checklist covers them under Business Visa sub-category B-3 (see the Business Visa document).
 
 ## Required Documents
 
@@ -16,20 +20,16 @@
 3. **One recent passport-size colour photograph** (2X2) depicting full face with white background.
 4. A copy of **National ID Card OR Birth Certificate** (whichever applicable).
 5. **Proof of Residence**: a copy of the electricity bill OR gas bill OR landline telephone bill (not less than 6 months old).
-6. **Proof of Financial soundness**:
-   - (i) Bank statement for last six months showing sufficient funds
-   - (ii) Endorsement of foreign currency equivalent to US$150/- per applicant (endorsement should not be older than three months at the time of submission)
-   - OR copy of international credit card or Travel card (example: SBI Travel card)
-7. **Proof of Profession** — one of the following:
+6. **Proof of Profession** — one of the following:
    - Government Order Copy (if the applicant is a serving government employee)
    - OR Certificate from the employer (if the applicant is a private company employee)
-   - OR a copy of the registration granted to the business establishment by the Government of Bangladesh (in case of self-employed persons)
-   - OR a copy of identity card from the educational institution (if the applicant is a student)
+   - OR a copy of the Registration granted to the Business establishment by the Government of Bangladesh along with an English translation [if not in English] (in case of self-employed persons)
+   - OR a copy of Identity card from the educational institution (if the applicant is a student)
    - OR a copy of the retirement papers (if the applicant is a retired government employee)
-8. **For a Bangladesh national married to an Indian national, or their children:**
-   - Proof of Indian address of the spouse
-   - Indian Voter Card of spouse / Aadhar Card of spouse / Marriage Certificate / Nikahnama
-   - Copy of passport of the Indian spouse (if available)
-9. **For artists / cultural personalities / academicians / professionals who visit India to participate in non-profitable / non-commercial performances sponsored by reputed institutions in India:**
-   - A letter of invitation from the organizers of the event in India
-   - A letter of introduction from the organization in which the applicant is working
+7. **For a Bangladesh national married to an Indian national, or their children:**
+   - Proof of **Indian address of the spouse**
+   - Indian **Voter Card** of spouse / **Aadhar Card** of spouse
+   - **Marriage Certificate / Nikahnama apostille by the Ministry of Foreign Affairs of Bangladesh and further attested by the High Commission of India, Dhaka**
+   - Copy of passport of the Indian spouse/parent (in case the applicant is a child)
+
+**Please note (from the source):** The above list of documents are not final. High Commission of India, Dhaka reserves the right to ask any additional documents for processing the visa application.

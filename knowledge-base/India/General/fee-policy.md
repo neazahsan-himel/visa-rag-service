@@ -15,9 +15,9 @@
 
 Per the High Commission of India, Dhaka's FAQ (see `hci-dhaka-faq.md` Q3):
 
-> "বাংলাদেশীদের জন্য ভারত সরকার কর্তৃক কোনো ভিসা ফি নেয়া হয় না। ভারতীয় ভিসা আবেদন কেন্দ্র নামমাত্র ৮০০ টাকা প্রক্রিয়াকরণ ফি নিয়ে থাকে।"
+> "বাংলাদেশীদের জন্য ভারত সরকার কর্তৃক কোনো ভিসা ফি নেয়া হয় না। ভারতীয় ভিসা আবেদন কেন্দ্র নামমাত্র ৮০০ টাকা প্রক্রিয়াকরণ ফি নিয়ে থাকে। অতিরিক্ত কোন ফি নেয়া হয় না।"
 
-**No visa fee is charged by the Government of India for Bangladeshi nationals.** The Indian Visa Application Centre (IVAC) charges a nominal processing fee of **৳800 (Bangladeshi Taka)**. This is the only concrete visa-fee figure found across all sources checked; it supersedes the "no fee table published" note below for the specific case of a Bangladeshi passport holder.
+**No visa fee is charged by the Government of India for Bangladeshi nationals.** The Indian Visa Application Centre (IVAC) charges a nominal processing fee of **৳800 (Bangladeshi Taka)**, and **no additional fee is charged** (FAQ re-verified 2026-11-01; page last updated 2026-10-29). This is the only concrete visa-fee figure found across all sources checked; it supersedes the "no fee table published" note below for the specific case of a Bangladeshi passport holder.
 
 **Not the same as consular/passport fees:** the High Commission's published "Fee Schedule" PDF (`dhaka_29jun2026_fees.pdf`, effective 1 July 2026) covers passport re-issuance, OCI, nationality, and attestation services for Indian citizens/OCI cardholders in Bangladesh — it has no visa-fee section and does not apply to a Bangladeshi national applying for an Indian visa. Not ingested here; noted only to prevent conflating the two.
 

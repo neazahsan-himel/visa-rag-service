@@ -6,7 +6,8 @@
 **Passport:** Bangladesh (BD)
 **Visa type:** GENERAL (applies to all visa types)
 **Document version:** Not specified on source
-**Retrieved:** 2026-08-06 (no "last updated" date is shown on the source page, so the retrieval date is used as `lastUpdated`)
+**Last updated (per source page):** 2026-10-29 ("সর্বশেষ আপডেট: 29/10/2026")
+**Retrieved:** 2026-08-06; re-verified 2026-11-01 (all 9 questions unchanged except Q3, which gained the sentence "অতিরিক্ত কোন ফি নেয়া হয় না।")
 **Language note:** the source page is in Bengali. Original Bengali is given first as the authoritative quote, followed by an English translation (translated by the extraction process, not an official HCI translation — treat the Bengali as the source of truth if the two ever seem to disagree).
 
 ## Q1. আমি কী ভাবে ভারতীয় ভিসার জন্য আবেদন করতে পারি?
@@ -23,9 +24,9 @@
 
 ## Q3. ভিসা ফি হিসাবে আমাকে কত টাকা জমা দিতে হবে? অতিরিক্ত কোন টাকা কি জমা দিতে হয়?
 
-> "বাংলাদেশীদের জন্য ভারত সরকার কর্তৃক কোনো ভিসা ফি নেয়া হয় না। ভারতীয় ভিসা আবেদন কেন্দ্র নামমাত্র ৮০০ টাকা প্রক্রিয়াকরণ ফি নিয়ে থাকে।"
+> "বাংলাদেশীদের জন্য ভারত সরকার কর্তৃক কোনো ভিসা ফি নেয়া হয় না। ভারতীয় ভিসা আবেদন কেন্দ্র নামমাত্র ৮০০ টাকা প্রক্রিয়াকরণ ফি নিয়ে থাকে। অতিরিক্ত কোন ফি নেয়া হয় না।"
 
-**English (how much visa fee must I pay? Is any extra amount required?):** No visa fee is charged by the Government of India for Bangladeshi nationals. The Indian Visa Application Centre charges a nominal processing fee of **৳800 (Bangladeshi Taka)**.
+**English (how much visa fee must I pay? Is any extra amount required?):** No visa fee is charged by the Government of India for Bangladeshi nationals. The Indian Visa Application Centre charges a nominal processing fee of **৳800 (Bangladeshi Taka)**. **No additional fee is charged.**
 
 ## Q4. ভারতীয় হাই কমিশনের ইমেইল আইডি কোনটি?
 

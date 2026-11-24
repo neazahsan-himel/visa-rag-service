@@ -54,8 +54,8 @@
       "destinationIso": "IN",
       "visaTypeCode": "TOURIST",
       "expectedSources": ["India Tourist Visa - Required Documents (HCI Dhaka)"],
-      "expectedFacts": [["150"], ["three months", "3 months"]],
-      "forbiddenFacts": []
+      "expectedFacts": [["200"], ["three months", "3 months"]],
+      "forbiddenFacts": ["150"]
     },
     {
       "id": "tourist-bank-statement-period",
@@ -595,6 +595,94 @@
       "expectedSources": [],
       "expectedFacts": [],
       "forbiddenFacts": ["e-visa", "sticker"]
+    },
+    {
+      "id": "business-financial-soundness",
+      "category": "ANSWERABLE",
+      "question": "What proof of financial soundness do I need for an Indian business visa?",
+      "passportIso": "BD",
+      "destinationIso": "IN",
+      "visaTypeCode": "BUSINESS",
+      "expectedSources": ["India Business Visa - Required Documents (HCI Dhaka)"],
+      "expectedFacts": [["income tax", "audited accounts"], ["5 lacs", "5 lakh", "five lakh"]],
+      "forbiddenFacts": []
+    },
+    {
+      "id": "conference-mea-clearance",
+      "category": "ANSWERABLE",
+      "question": "Do I need any government clearance for an Indian conference visa?",
+      "passportIso": "BD",
+      "destinationIso": "IN",
+      "visaTypeCode": "CONFERENCE",
+      "expectedSources": ["India Conference Visa - Required Documents (HCI Dhaka)"],
+      "expectedFacts": [["Ministry of External Affairs", "MEA"], ["political clearance", "political"]],
+      "forbiddenFacts": []
+    },
+    {
+      "id": "medical-recognized-hospital",
+      "category": "ANSWERABLE",
+      "question": "Can I get an Indian medical visa with an appointment letter from any hospital in India?",
+      "passportIso": "BD",
+      "destinationIso": "IN",
+      "visaTypeCode": "MEDICAL",
+      "expectedSources": ["India Medical Visa - Required Documents (HCI Dhaka)"],
+      "expectedFacts": [["ICMR", "NABH", "CGHS", "recognized", "recognised"]],
+      "forbiddenFacts": []
+    },
+    {
+      "id": "entry-nikahnama-apostille",
+      "category": "ANSWERABLE",
+      "question": "I am married to an Indian citizen. Does my Nikahnama need to be attested for the Indian visa?",
+      "passportIso": "BD",
+      "destinationIso": "IN",
+      "visaTypeCode": "ENTRY",
+      "expectedSources": ["India Entry Visa - Required Documents (HCI Dhaka)"],
+      "expectedFacts": [["apostille", "apostilled"], ["High Commission of India"]],
+      "forbiddenFacts": []
+    },
+    {
+      "id": "journalist-documents",
+      "category": "ANSWERABLE",
+      "question": "What letter does a journalist need for an Indian journalist visa?",
+      "passportIso": "BD",
+      "destinationIso": "IN",
+      "visaTypeCode": "JOURNALIST",
+      "expectedSources": ["India Journalist Visa - Required Documents (HCI Dhaka)"],
+      "expectedFacts": [["media house", "employer"]],
+      "forbiddenFacts": []
+    },
+    {
+      "id": "journalist-other-purpose",
+      "category": "ANSWERABLE",
+      "question": "I am a journalist travelling to India for tourism. Which visa should I apply for?",
+      "passportIso": "BD",
+      "destinationIso": "IN",
+      "visaTypeCode": "JOURNALIST",
+      "expectedSources": ["India Journalist Visa - Required Documents (HCI Dhaka)"],
+      "expectedFacts": [["J-1", "journalist visa"]],
+      "forbiddenFacts": []
+    },
+    {
+      "id": "double-entry-embassy-appointment",
+      "category": "ANSWERABLE",
+      "question": "I am going to India to apply for a visa at a foreign embassy there. What extra document do I need?",
+      "passportIso": "BD",
+      "destinationIso": "IN",
+      "visaTypeCode": "DOUBLE_ENTRY",
+      "expectedSources": ["India Double Entry Visa - Required Documents (HCI Dhaka)"],
+      "expectedFacts": [["appointment confirmation", "appointment"]],
+      "forbiddenFacts": []
+    },
+    {
+      "id": "bn-tourist-endorsement",
+      "category": "ANSWERABLE",
+      "question": "ইন্ডিয়ান টুরিস্ট ভিসার জন্য কত ডলার এনডোর্স করতে হবে?",
+      "passportIso": "BD",
+      "destinationIso": "IN",
+      "visaTypeCode": "TOURIST",
+      "expectedSources": ["India Tourist Visa - Required Documents (HCI Dhaka)"],
+      "expectedFacts": [["200", "২০০"]],
+      "forbiddenFacts": ["150", "১৫০"]
     }
   ]
 }
